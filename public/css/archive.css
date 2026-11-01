@@ -1,0 +1,636 @@
+.archive-page .archive-hero {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--green-deep);
+    color: var(--ivory);
+}
+
+.archive-page .archive-hero::before,
+.archive-page .archive-hero::after {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    content: "";
+    pointer-events: none;
+}
+
+.archive-page .archive-hero::before {
+    opacity: .14;
+    background-image:
+        repeating-linear-gradient(132deg, transparent 0 42px, rgba(215, 179, 111, .55) 43px, transparent 44px 86px),
+        repeating-linear-gradient(48deg, transparent 0 68px, rgba(109, 157, 145, .38) 69px, transparent 70px 138px);
+    mask-image: linear-gradient(90deg, transparent, #000 38%, #000);
+}
+
+.archive-page .archive-hero::after {
+    background: linear-gradient(90deg, var(--green-deep) 0%, rgba(25, 56, 45, .92) 58%, rgba(25, 56, 45, .68));
+}
+
+.archive-page .archive-hero-inner {
+    position: relative;
+    min-height: 390px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 70px 65px;
+}
+
+.archive-page .archive-hero .eyebrow {
+    margin-bottom: 18px;
+}
+
+.archive-page .archive-hero h1 {
+    max-width: 850px;
+    margin: 0;
+    color: var(--ivory);
+    font-family: var(--serif);
+    font-size: clamp(48px, 7vw, 82px);
+    font-weight: 500;
+    letter-spacing: -.05em;
+    line-height: 1.08;
+}
+
+.archive-page .archive-hero h1 em {
+    color: #d7b36f;
+    font-weight: 500;
+}
+
+.archive-page .archive-hero-copy {
+    max-width: 565px;
+    margin: 20px 0 22px;
+    color: rgba(245, 239, 227, .78);
+    font-size: 13px;
+    line-height: 1.85;
+}
+
+.archive-page .archive-hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: rgba(245, 239, 227, .72);
+    font-size: 10px;
+    letter-spacing: .04em;
+}
+
+.archive-page .archive-hero-mark {
+    color: #d7b36f;
+    font-size: 16px;
+}
+
+.archive-page .archive-meta-divider {
+    width: 22px;
+    height: 1px;
+    background: rgba(215, 179, 111, .55);
+}
+
+.archive-page .archive-hero-seal {
+    position: absolute;
+    right: max(8%, calc((100vw - 1240px) / 2));
+    bottom: 58px;
+    width: 104px;
+    height: 104px;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    border: 1px solid rgba(215, 179, 111, .55);
+    border-radius: 50%;
+    color: #e2c47f;
+    font-family: var(--serif);
+    font-size: 34px;
+    line-height: .9;
+    transform: rotate(8deg);
+}
+
+.archive-page .archive-hero-seal::before {
+    position: absolute;
+    inset: 6px;
+    border: 1px solid rgba(215, 179, 111, .28);
+    border-radius: 50%;
+    content: "";
+}
+
+.archive-page .archive-hero-seal small {
+    margin-top: 7px;
+    font-family: var(--sans);
+    font-size: 6px;
+    letter-spacing: .16em;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.archive-page .archive-catalog {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--paper);
+    background-image: radial-gradient(ellipse at 92% 18%, rgba(197, 161, 90, .08), transparent 28%);
+}
+
+.archive-page .archive-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 28px;
+    margin-bottom: 30px;
+}
+
+.archive-page .archive-heading .eyebrow {
+    margin-bottom: 12px;
+}
+
+.archive-page .archive-heading .section-title {
+    max-width: 720px;
+    margin: 0;
+}
+
+.archive-page .archive-heading-note {
+    max-width: 250px;
+    margin: 0 0 5px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.archive-page .archive-tools {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 25px;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+}
+
+.archive-page .archive-search {
+    width: min(520px, 100%);
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 5px 5px 5px 15px;
+    border: 1px solid rgba(37, 72, 56, .22);
+    border-radius: 3px;
+    background: #fffdf8;
+}
+
+.archive-page .archive-search svg {
+    width: 17px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: #777267;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+}
+
+.archive-page .archive-search input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--charcoal);
+    font-size: 11px;
+}
+
+.archive-page .archive-search input::placeholder {
+    color: #888579;
+}
+
+.archive-page .archive-search:focus-within {
+    outline: 2px solid rgba(197, 161, 90, .55);
+    outline-offset: 2px;
+}
+
+.archive-page .archive-search button {
+    align-self: stretch;
+    flex: 0 0 auto;
+    padding: 0 17px;
+    border: 0;
+    border-radius: 2px;
+    background: var(--terracotta);
+    color: white;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    transition: background .2s ease;
+}
+
+.archive-page .archive-search button:hover {
+    background: #87412f;
+}
+
+.archive-page .archive-result-count {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 12px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.6;
+    text-align: right;
+}
+
+.archive-page .archive-result-count a {
+    color: var(--terracotta);
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.archive-page .archive-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 22px;
+}
+
+.archive-page .archive-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid rgba(56, 46, 37, .12);
+    border-radius: 7px;
+    background: #fffdf8;
+    box-shadow: 0 9px 26px rgba(34, 47, 37, .055);
+    transition: transform .24s ease, box-shadow .24s ease;
+}
+
+.archive-page .archive-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 16px 32px rgba(34, 47, 37, .12);
+}
+
+.archive-page .archive-card-visual {
+    position: relative;
+    height: 230px;
+    display: block;
+    overflow: hidden;
+    background: var(--green);
+}
+
+.archive-page .archive-card-visual::after {
+    position: absolute;
+    inset: 38% 0 0;
+    background: linear-gradient(transparent, rgba(17, 35, 27, .72));
+    content: "";
+    pointer-events: none;
+}
+
+.archive-page .archive-card-visual img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+    transition: transform .5s ease;
+}
+
+.archive-page .archive-card:hover .archive-card-visual img {
+    transform: scale(1.035);
+}
+
+.archive-page .archive-image-credit {
+    position: absolute;
+    z-index: 1;
+    right: 14px;
+    bottom: 12px;
+    left: 14px;
+    overflow: hidden;
+    color: rgba(255, 255, 255, .86);
+    font-size: 8px;
+    line-height: 1.5;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.archive-page .archive-card-index {
+    position: absolute;
+    z-index: 1;
+    top: 13px;
+    left: 13px;
+    min-width: 31px;
+    height: 31px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(245, 239, 227, .58);
+    border-radius: 50%;
+    background: rgba(25, 56, 45, .62);
+    color: var(--ivory);
+    font-family: var(--serif);
+    font-size: 12px;
+}
+
+.archive-page .archive-art-fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 11px;
+    background:
+        radial-gradient(ellipse at 50% 45%, transparent 0 17%, rgba(215, 179, 111, .2) 17.4% 18%, transparent 18.4% 29%, rgba(215, 179, 111, .14) 29.4% 30%, transparent 30.4%),
+        linear-gradient(135deg, #19382d, #315442);
+    color: rgba(245, 239, 227, .82);
+    font-family: var(--serif);
+    font-size: 12px;
+}
+
+.archive-page .archive-fallback-mark {
+    color: rgba(215, 179, 111, .74);
+    font-size: 42px;
+    letter-spacing: .12em;
+}
+
+.archive-page .archive-card-content {
+    min-height: 245px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 19px 20px 17px;
+}
+
+.archive-page .archive-card-region {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 9px;
+    color: var(--terracotta);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.archive-page .archive-card-region span {
+    color: var(--gold);
+    font-size: 13px;
+}
+
+.archive-page .archive-card-content h3 {
+    margin: 0;
+    color: var(--green);
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.archive-page .archive-card-content h3 a:hover,
+.archive-page .archive-card-content h3 a:focus-visible {
+    color: var(--terracotta);
+}
+
+.archive-page .archive-card-description {
+    display: -webkit-box;
+    overflow: hidden;
+    margin: 10px 0 13px;
+    color: #706d63;
+    font-size: 11px;
+    line-height: 1.7;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
+.archive-page .archive-card-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+}
+
+.archive-page .archive-card-categories li {
+    padding: 5px 8px;
+    border: 1px solid rgba(197, 161, 90, .32);
+    border-radius: 999px;
+    background: rgba(197, 161, 90, .09);
+    color: #71592d;
+    font-size: 8px;
+    line-height: 1.3;
+}
+
+.archive-page .archive-card-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 14px;
+    color: var(--terracotta);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.archive-page .archive-card-link span {
+    transition: transform .2s ease;
+}
+
+.archive-page .archive-card-link:hover span {
+    transform: translate(2px, -2px);
+}
+
+.archive-page .archive-empty {
+    display: grid;
+    justify-items: center;
+    padding: 65px 24px;
+    border: 1px solid rgba(56, 46, 37, .12);
+    background: rgba(255, 253, 248, .72);
+    text-align: center;
+}
+
+.archive-page .archive-empty-mark {
+    color: var(--gold);
+    font-size: 29px;
+}
+
+.archive-page .archive-empty h3 {
+    margin: 12px 0 7px;
+    color: var(--green);
+    font-family: var(--serif);
+    font-size: 25px;
+    font-weight: 500;
+}
+
+.archive-page .archive-empty p {
+    max-width: 440px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.7;
+}
+
+.archive-page .archive-empty a {
+    margin-top: 18px;
+    color: var(--terracotta);
+    font-size: 11px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+}
+
+.archive-page .archive-pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: 38px;
+}
+
+.archive-page .archive-pagination nav > div:first-child {
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.archive-page .archive-pagination nav > div:last-child {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.archive-page .archive-pagination a,
+.archive-page .archive-pagination span[aria-current="page"] span,
+.archive-page .archive-pagination span[aria-disabled="true"] span {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 10px;
+    border: 1px solid rgba(37, 72, 56, .18);
+    background: #fffdf8;
+    color: var(--green);
+    font-size: 10px;
+}
+
+.archive-page .archive-pagination a:hover {
+    border-color: var(--green);
+    background: var(--green);
+    color: white;
+}
+
+.archive-page .archive-pagination span[aria-current="page"] span {
+    border-color: var(--green);
+    background: var(--green);
+    color: white;
+}
+
+.archive-page .archive-pagination span[aria-disabled="true"] span {
+    color: #a7a397;
+}
+
+@media (max-width: 900px) {
+    .archive-page .archive-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 17px;
+    }
+
+    .archive-page .archive-card-visual {
+        height: 210px;
+    }
+
+    .archive-page .archive-card-content {
+        min-height: 235px;
+    }
+}
+
+@media (max-width: 700px) {
+    .archive-page .archive-hero-inner {
+        min-height: 360px;
+        padding-block: 58px;
+    }
+
+    .archive-page .archive-hero h1 {
+        max-width: 520px;
+        font-size: clamp(46px, 10vw, 66px);
+    }
+
+    .archive-page .archive-hero-seal {
+        right: 7%;
+        bottom: 22px;
+        width: 76px;
+        height: 76px;
+        font-size: 26px;
+    }
+
+    .archive-page .archive-hero-seal small {
+        margin-top: 5px;
+        font-size: 5px;
+    }
+
+    .archive-page .archive-heading {
+        display: block;
+        margin-bottom: 22px;
+    }
+
+    .archive-page .archive-heading-note {
+        max-width: 420px;
+        margin-top: 12px;
+    }
+
+    .archive-page .archive-tools {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .archive-page .archive-search {
+        width: 100%;
+    }
+
+    .archive-page .archive-result-count {
+        text-align: left;
+    }
+}
+
+@media (max-width: 520px) {
+    .archive-page .archive-hero-inner {
+        min-height: 390px;
+    }
+
+    .archive-page .archive-hero-copy {
+        max-width: 330px;
+        font-size: 11px;
+    }
+
+    .archive-page .archive-hero-meta {
+        max-width: 300px;
+        flex-wrap: wrap;
+        font-size: 9px;
+    }
+
+    .archive-page .archive-meta-divider {
+        display: none;
+    }
+
+    .archive-page .archive-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .archive-page .archive-card-visual {
+        height: 225px;
+    }
+
+    .archive-page .archive-card-content {
+        min-height: 220px;
+        padding: 17px;
+    }
+
+    .archive-page .archive-search {
+        gap: 8px;
+        padding-left: 11px;
+    }
+
+    .archive-page .archive-search input {
+        font-size: 10px;
+    }
+
+    .archive-page .archive-search button {
+        padding-inline: 12px;
+        font-size: 9px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .archive-page .archive-card,
+    .archive-page .archive-card-visual img,
+    .archive-page .archive-card-link span {
+        transition: none;
+    }
+}
