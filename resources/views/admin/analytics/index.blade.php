@@ -19,7 +19,7 @@
             <h1>Analitik <em>Kunjungan.</em></h1>
             <p>Ringkasan anonim kunjungan halaman publik WARNA BUDAYA. Data lokasi hanya ditampilkan bila tersedia.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>DATA<br>ANONIM</small></div>
+        <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
     </section>
 
     <section class="ua-panel ua-analytics-filters" aria-label="Filter analitik">

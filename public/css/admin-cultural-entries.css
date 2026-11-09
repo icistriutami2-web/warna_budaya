@@ -27,6 +27,46 @@
     margin-bottom: 21px;
 }
 
+.admin-cultural-entries-page .cultural-entry-toolbar-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.admin-cultural-entries-page .cultural-entry-bulk-publish-form {
+    margin: 0;
+}
+
+.admin-cultural-entries-page .cultural-entry-button-publish-all {
+    border-color: var(--dashboard-forest);
+    background: var(--dashboard-forest);
+    color: #fffdf8;
+}
+
+.admin-cultural-entries-page .cultural-entry-bulk-results {
+    margin: 14px 0;
+    padding: 14px 18px;
+    border: 1px solid rgba(197, 161, 90, .32);
+    background: rgba(197, 161, 90, .08);
+    color: var(--dashboard-ink);
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.admin-cultural-entries-page .cultural-entry-bulk-results h2 {
+    margin: 0 0 8px;
+    color: var(--dashboard-forest);
+    font-family: var(--admin-serif);
+    font-size: 16px;
+}
+
+.admin-cultural-entries-page .cultural-entry-bulk-results ul {
+    margin: 0;
+    padding-left: 18px;
+}
+
 .admin-cultural-entries-page .cultural-entry-toolbar .admin-eyebrow {
     margin: 0 0 8px;
 }
@@ -326,6 +366,15 @@
 
 .admin-cultural-entries-page .cultural-entry-action.is-danger {
     color: var(--dashboard-terracotta);
+}
+
+.admin-cultural-entries-page .cultural-entry-action.is-publish {
+    color: var(--dashboard-forest);
+}
+
+.admin-cultural-entries-page .cultural-entry-publication-form {
+    display: inline-flex;
+    margin: 0;
 }
 
 .admin-cultural-entries-page .cultural-entry-empty {

@@ -4,6 +4,10 @@
 @section('meta_description', 'Temukan keindahan, cerita, dan warisan budaya dari seluruh penjuru Indonesia.')
 @section('body_class', 'home-page')
 
+@push('styles')
+    <link rel="stylesheet" href="{{ asset('css/digital-books.css') }}">
+@endpush
+
 @section('content')
     <section class="hero" aria-labelledby="hero-title">
         <div class="hero-art" aria-hidden="true">
@@ -19,7 +23,7 @@
                 <input id="hero-search" type="search" name="search" placeholder="Cari tarian, kain, tradisi, dan lainnya">
                 <button type="submit">Temukan</button>
             </form>
-            <a class="button button-outline-light" href="#jelajah">
+            <a class="button button-outline-light" href="{{ route('cultural-map.index') }}">
                 Jelajahi Peta Budaya
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 5l7 7-7 7"></path></svg>
             </a>
@@ -175,18 +179,27 @@
             </div>
 
             @if ($featuredEntries->isNotEmpty())
-                <div class="featured-grid">
+                <div class="featured-grid{{ $featuredEntries->count() === 1 ? ' featured-grid-single' : '' }}">
                     @foreach ($featuredEntries as $entry)
                         @php
                             $cover = $entry->media->first();
                             $coverUrl = $cover?->external_url && \Illuminate\Support\Str::startsWith($cover->external_url, ['https://', 'http://'])
                                 ? $cover->external_url
                                 : ($cover?->file_path ? \Illuminate\Support\Facades\Storage::url($cover->file_path) : null);
+                            $isAngklung = \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($entry->title), 'angklung');
+                            $featuredImageUrl = $isAngklung ? asset('images/culture/angklung-saung-udjo.jpg') : $coverUrl;
                         @endphp
                         <article class="featured-card">
-                            <a class="featured-image{{ $coverUrl ? ' has-image' : '' }}" href="{{ route('cultural-entries.index', ['search' => $entry->title]) }}">
-                                @if ($coverUrl)
-                                    <img src="{{ $coverUrl }}" alt="{{ $cover->alt_text ?: $entry->title }}" loading="lazy">
+                            <a class="featured-image{{ $featuredImageUrl ? ' has-image' : '' }}" href="{{ route('cultural-entries.index', ['search' => $entry->title]) }}">
+                                @if ($featuredImageUrl)
+                                    <img
+                                        class="featured-image-media"
+                                        src="{{ $featuredImageUrl }}"
+                                        alt="{{ $isAngklung ? 'Pertunjukan angklung di Saung Angklung Udjo, Bandung' : ($cover->alt_text ?: $entry->title) }}"
+                                        loading="lazy"
+                                        decoding="async"
+                                    >
+                                    <span class="image-placeholder" aria-hidden="true" hidden><span>{{ mb_substr($entry->title, 0, 1) }}</span></span>
                                 @else
                                     <span class="image-placeholder" aria-hidden="true"><span>{{ mb_substr($entry->title, 0, 1) }}</span></span>
                                 @endif
@@ -196,6 +209,11 @@
                             </a>
                             <div class="featured-card-copy">
                                 <span class="featured-region">{{ $entry->region?->name ?? 'Nusantara' }}</span>
+                                @if ($isAngklung)
+                                    <a class="featured-photo-credit" href="https://commons.wikimedia.org/wiki/File:Pertunjukan_Angklung_di_Saung_Angklung_Udjo.jpg" target="_blank" rel="noopener noreferrer">
+                                        Foto: Irhanz · Wikimedia Commons · CC BY-SA 4.0
+                                    </a>
+                                @endif
                                 <h3><a href="{{ route('cultural-entries.index', ['search' => $entry->title]) }}">{{ $entry->title }}</a></h3>
                                 <p>{{ $entry->short_description }}</p>
                             </div>
@@ -223,9 +241,9 @@
         <div class="page-shell story-panel">
             <div class="story-copy">
                 <p class="eyebrow eyebrow-light"><span class="eyebrow-line"></span> Cerita Nusantara</p>
-                <h2 id="story-title">Warisan bukan sekadar masa lalu. Ia adalah <em>cerita yang terus hidup.</em></h2>
-                <p>Kenali makna di balik tradisi, karya, dan pengetahuan yang membentuk keseharian masyarakat Indonesia.</p>
-                <a class="button button-outline-light" href="{{ route('cultural-entries.index') }}">Temukan kisah budaya <span aria-hidden="true">↗</span></a>
+                <h2 id="story-title">Baca Nusantara melalui <em>pengetahuan dan budaya.</em></h2>
+                <p>Lima buku digital bergambar mengajak Anda mengenal sejarah, rumah adat, rempah, tradisi, dan kekayaan alam Indonesia.</p>
+                <a class="button button-outline-light" href="{{ route('digital-books.index') }}">Jelajahi semua buku <span aria-hidden="true">↗</span></a>
             </div>
             <figure class="story-image">
                 <img src="{{ asset('images/culture/borobudur.jpg') }}" alt="Stupa Candi Borobudur, salah satu warisan arsitektur bersejarah Indonesia" loading="lazy" decoding="async">
@@ -234,6 +252,72 @@
                     <a href="https://commons.wikimedia.org/wiki/File:Borobudur-Temple-Park_Indonesia_Stupas-of-Borobudur-01.jpg" target="_blank" rel="noopener noreferrer">Photo by CEphoto, Uwe Aranas · CC BY-SA 3.0</a>
                 </figcaption>
             </figure>
+        </div>
+    </section>
+
+    <section class="digital-books-section" aria-labelledby="home-books-title">
+        <div class="page-shell">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow"><span class="eyebrow-line"></span> Perpustakaan digital</p>
+                    <h2 class="section-title" id="home-books-title">Lima topik, satu <em>Nusantara.</em></h2>
+                </div>
+                <a class="text-link section-heading-link" href="{{ route('digital-books.index') }}">Lihat semua buku <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="digital-book-grid">
+                @foreach ($books as $book)
+                    @php
+                        $coverUrl = \Illuminate\Support\Str::startsWith($book['cover'], ['https://', 'http://'])
+                            ? $book['cover']
+                            : asset($book['cover']);
+                    @endphp
+                    <article class="digital-book-card">
+                        <a class="digital-book-cover" href="{{ route('digital-books.show', $book['slug']) }}" aria-label="Baca buku {{ $book['title'] }}">
+                            <img src="{{ $coverUrl }}" alt="{{ $book['cover_alt'] }}" loading="lazy" decoding="async">
+                            <span class="digital-book-cover-label">{{ $book['category'] }}</span>
+                        </a>
+                        <div class="digital-book-copy">
+                            <span class="digital-book-category">{{ $book['origin'] }}</span>
+                            <h3><a href="{{ route('digital-books.show', $book['slug']) }}">{{ $book['title'] }}</a></h3>
+                            <p class="digital-book-description">{{ $book['description'] }}</p>
+                            <a class="digital-book-link" href="{{ route('digital-books.show', $book['slug']) }}">Baca Buku <span aria-hidden="true">↗</span></a>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
+        </div>
+    </section>
+
+    <section class="travel-section" id="wisata-indonesia" aria-labelledby="travel-title">
+        <div class="page-shell">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow"><span class="eyebrow-line"></span> Bentang alam dan warisan</p>
+                    <h2 class="section-title" id="travel-title">Jelajahi Wisata <em>Indonesia.</em></h2>
+                </div>
+                <a class="text-link section-heading-link" href="{{ route('regions.index') }}">Jelajah Nusantara <span aria-hidden="true">↗</span></a>
+            </div>
+            <div class="travel-grid">
+                @foreach ($destinations as $destination)
+                    @php
+                        $destinationSlug = \Illuminate\Support\Str::slug($destination['name']);
+                        $destinationUrl = route('destinations.show', $destinationSlug);
+                    @endphp
+                    <article class="travel-card">
+                        <div class="travel-card-image">
+                            <a class="travel-card-image-link destination-detail-link" href="{{ $destinationUrl }}" aria-label="Lihat detail {{ $destination['name'] }}, {{ $destination['region'] }}">
+                                <img src="{{ asset($destination['image']) }}" alt="{{ $destination['alt'] }}" loading="lazy" decoding="async">
+                            </a>
+                            <a class="travel-card-image-credit" href="{{ $destination['source'] }}" target="_blank" rel="noopener noreferrer">{{ $destination['credit'] }} · Wikimedia Commons</a>
+                        </div>
+                        <div class="travel-card-copy">
+                            <span>{{ $destination['region'] }}</span>
+                            <h3><a class="destination-detail-link" href="{{ $destinationUrl }}">{{ $destination['name'] }}</a></h3>
+                            <p>{{ $destination['description'] }}</p>
+                        </div>
+                    </article>
+                @endforeach
+            </div>
         </div>
     </section>
 @endsection

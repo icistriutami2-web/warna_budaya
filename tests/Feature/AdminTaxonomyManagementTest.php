@@ -24,12 +24,12 @@ class AdminTaxonomyManagementTest extends TestCase
         $this->createSchema();
     }
 
-    public function test_guest_and_verifikator_cannot_access_region_or_category_management(): void
+    public function test_guest_and_legacy_role_cannot_access_region_or_category_management(): void
     {
         $this->getJson(route('admin.regions.index'))->assertUnauthorized();
         $this->getJson(route('admin.categories.index'))->assertUnauthorized();
 
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
+        $verifikator = $this->createUser('verifikator');
         $unassigned = $this->createUser(null);
 
         foreach ([$verifikator, $unassigned] as $user) {
@@ -54,30 +54,23 @@ class AdminTaxonomyManagementTest extends TestCase
         }
     }
 
-    public function test_admin_and_super_admin_can_manage_both_resources(): void
+    public function test_super_admin_can_manage_both_resources(): void
     {
-        foreach ([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN] as $role) {
-            $user = $this->createUser($role);
+        $user = $this->createUser(User::ROLE_SUPER_ADMIN);
 
-            $this->actingAs($user)
-                ->getJson(route('admin.regions.index'))
-                ->assertOk();
-            $this->actingAs($user)
-                ->getJson(route('admin.categories.index'))
-                ->assertOk();
-            $this->actingAs($user)
-                ->postJson(route('admin.regions.store'), [
-                    'name' => 'Allowed Region '.str_replace('_', '-', $role),
-                    'slug' => 'allowed-region-'.str_replace('_', '-', $role),
-                ])
-                ->assertCreated();
-            $this->actingAs($user)
-                ->postJson(route('admin.categories.store'), [
-                    'name' => 'Allowed Category '.str_replace('_', '-', $role),
-                    'slug' => 'allowed-category-'.str_replace('_', '-', $role),
-                ])
-                ->assertCreated();
-        }
+        $this->actingAs($user)
+            ->getJson(route('admin.regions.index'))
+            ->assertOk();
+        $this->getJson(route('admin.categories.index'))
+            ->assertOk();
+        $this->postJson(route('admin.regions.store'), [
+            'name' => 'Allowed Region Super Admin',
+            'slug' => 'allowed-region-super-admin',
+        ])->assertCreated();
+        $this->postJson(route('admin.categories.store'), [
+            'name' => 'Allowed Category Super Admin',
+            'slug' => 'allowed-category-super-admin',
+        ])->assertCreated();
     }
 
     public function test_region_search_status_pagination_and_existing_records_are_preserved(): void
@@ -86,7 +79,7 @@ class AdminTaxonomyManagementTest extends TestCase
             $this->createRegion(sprintf('Test Wilayah %02d', $number), sprintf('test-wilayah-%02d', $number));
         }
         $inactiveId = $this->createRegion('Test Wilayah Nonaktif', 'test-wilayah-nonaktif', false);
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $response = $this->actingAs($admin)->getJson(route('admin.regions.index', [
             'search' => 'Test Wilayah',
@@ -106,7 +99,7 @@ class AdminTaxonomyManagementTest extends TestCase
 
     public function test_region_crud_validates_duplicate_slug_and_changes_status(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $this->createRegion('Existing Province', 'existing-province');
 
         $this->actingAs($admin)
@@ -161,7 +154,7 @@ class AdminTaxonomyManagementTest extends TestCase
 
     public function test_region_cannot_be_deleted_when_it_has_children_or_soft_deleted_entries(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $parentId = $this->createRegion('Parent', 'parent');
         $this->createRegion('Child', 'child', true, $parentId);
         $this->actingAs($admin)
@@ -185,7 +178,7 @@ class AdminTaxonomyManagementTest extends TestCase
 
     public function test_region_and_category_updates_reject_hierarchical_cycles(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $regionParent = $this->createRegion('Region Parent', 'region-parent');
         $regionChild = $this->createRegion('Region Child', 'region-child', true, $regionParent);
         $categoryParent = $this->createCategory('Category Parent', 'category-parent');
@@ -212,7 +205,7 @@ class AdminTaxonomyManagementTest extends TestCase
         foreach (range(1, 13) as $number) {
             $this->createCategory(sprintf('Test Kategori %02d', $number), sprintf('test-kategori-%02d', $number));
         }
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($admin)
             ->getJson(route('admin.categories.index', [
@@ -280,7 +273,7 @@ class AdminTaxonomyManagementTest extends TestCase
 
     public function test_category_cannot_be_deleted_when_it_has_children_or_entry_pivot_rows(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $parentId = $this->createCategory('Parent Category', 'parent-category');
         $this->createCategory('Child Category', 'child-category', $parentId);
 

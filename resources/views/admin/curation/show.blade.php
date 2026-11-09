@@ -231,10 +231,11 @@
         <section class="admin-panel admin-action-panel">
             <div class="admin-panel-heading">
                 <div>
-                    <p class="admin-eyebrow"><span></span> Tindakan terpisah</p>
+                    <p class="admin-eyebrow"><span></span> Persetujuan editorial</p>
                     <h2>Publikasi</h2>
                 </div>
             </div>
+            <p class="admin-warning-note">Persetujuan publikasi oleh Admin atau Super Admin menentukan apakah artikel tampil di Arsip. Status verifikasi tetap dicatat terpisah dan bukan syarat publikasi.</p>
             @if ($publicationBlockers !== [])
                 <div class="admin-blocker-panel">
                     <strong>Syarat publikasi yang belum terpenuhi</strong>

@@ -30,6 +30,11 @@ class CulturalEntry extends Model
             ->where('verification_status', 'verified');
     }
 
+    public function scopeApprovedForPublication(Builder $query): Builder
+    {
+        return $query->where('publication_status', 'published');
+    }
+
     public function region(): BelongsTo
     {
         return $this->belongsTo(Region::class, 'origin_region_id');

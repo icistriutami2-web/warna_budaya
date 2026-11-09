@@ -13,16 +13,6 @@ class User extends Authenticatable
 
     public const ROLE_SUPER_ADMIN = 'super_admin';
 
-    public const ROLE_ADMIN = 'admin';
-
-    public const ROLE_VERIFIKATOR = 'verifikator';
-
-    public const ROLES = [
-        self::ROLE_SUPER_ADMIN,
-        self::ROLE_ADMIN,
-        self::ROLE_VERIFIKATOR,
-    ];
-
     protected $fillable = ['name', 'email', 'password'];
 
     protected $hidden = ['password', 'remember_token', 'role'];
@@ -38,20 +28,9 @@ class User extends Authenticatable
 
     public function hasRole(string $role): bool
     {
-        return in_array($role, self::ROLES, true)
-            && $this->role === $role
+        return $role === self::ROLE_SUPER_ADMIN
+            && $this->role === self::ROLE_SUPER_ADMIN
             && $this->is_active !== false;
-    }
-
-    public function hasAnyRole(string ...$roles): bool
-    {
-        foreach ($roles as $role) {
-            if ($this->hasRole($role)) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     public function createdCulturalEntries(): HasMany

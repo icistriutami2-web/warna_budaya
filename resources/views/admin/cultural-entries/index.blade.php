@@ -11,6 +11,8 @@
         data-show-template="{{ route('admin.cultural-entries.api.show', ['entry' => '__id__']) }}"
         data-update-template="{{ route('admin.cultural-entries.api.update', ['entry' => '__id__']) }}"
         data-delete-template="{{ route('admin.cultural-entries.api.destroy', ['entry' => '__id__']) }}"
+        data-publication-template="{{ route('admin.curation.entries.publication', ['entry' => '__id__']) }}"
+        data-csrf-token="{{ csrf_token() }}"
         data-regions-url="{{ route('admin.regions.index', ['per_page' => 100, 'status' => 'active']) }}"
         data-categories-url="{{ route('admin.categories.index', ['per_page' => 100, 'status' => 'active']) }}"
     ></div>
@@ -19,9 +21,9 @@
         <div>
             <p class="admin-eyebrow"><span></span> Pengelolaan arsip budaya</p>
             <h1>Data <em>Budaya.</em></h1>
-            <p>Rawat informasi budaya, wilayah asal, dan kategorinya. Perubahan status verifikasi dan publikasi dikelola melalui alur kerja terpisah.</p>
+            <p>Rawat informasi budaya, wilayah asal, dan kategorinya. Admin dan Super Admin dapat menyetujui publikasi langsung dari daftar ini.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>ARSIP<br>NUSANTARA</small></div>
+        <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
     </section>
 
     <section class="cultural-entry-workspace" aria-labelledby="cultural-entry-list-title">
@@ -31,9 +33,23 @@
                 <h2 id="cultural-entry-list-title">Daftar entri <span data-entry-total>—</span></h2>
                 <p>Data dimuat dari API administrasi yang terautentikasi.</p>
             </div>
-            <button class="cultural-entry-button cultural-entry-button-primary" type="button" data-entry-create>
-                <span aria-hidden="true">＋</span> Tambah entri
-            </button>
+            <div class="cultural-entry-toolbar-actions">
+                <form
+                    class="cultural-entry-bulk-publish-form"
+                    method="POST"
+                    action="{{ route('admin.curation.entries.publication.bulk') }}"
+                    data-bulk-publication-form
+                >
+                    @csrf
+                    <input type="hidden" name="confirm_bulk_publish" value="1">
+                    <button class="cultural-entry-button cultural-entry-button-publish-all" type="submit">
+                        Publikasikan semua yang layak
+                    </button>
+                </form>
+                <button class="cultural-entry-button cultural-entry-button-primary" type="button" data-entry-create>
+                    <span aria-hidden="true">＋</span> Tambah entri
+                </button>
+            </div>
         </div>
 
         <form class="cultural-entry-filters" data-entry-filter-form>
@@ -109,6 +125,19 @@
     </section>
 
     <div class="cultural-entry-feedback" role="status" aria-live="polite" data-entry-feedback hidden></div>
+    @if (session('status'))
+        <div class="cultural-entry-feedback is-success" role="status">{{ session('status') }}</div>
+    @endif
+    @if (session('publication_bulk_skipped'))
+        <section class="cultural-entry-bulk-results" role="status">
+            <h2>Entri yang belum dipublikasikan</h2>
+            <ul>
+                @foreach (session('publication_bulk_skipped') as $skipped)
+                    <li><strong>{{ $skipped['title'] }}</strong>: {{ implode(' ', $skipped['reasons']) }}</li>
+                @endforeach
+            </ul>
+        </section>
+    @endif
 
     <dialog class="cultural-entry-dialog" id="cultural-entry-form-dialog" aria-labelledby="cultural-entry-form-title">
         <form data-entry-form>

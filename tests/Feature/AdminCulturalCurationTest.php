@@ -7,6 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class AdminCulturalCurationTest extends TestCase
@@ -30,7 +31,7 @@ class AdminCulturalCurationTest extends TestCase
         $this->createEntry('Arsip Draft Pending');
         $this->createEntry('Arsip Verified', 'draft', 'verified');
         $this->createEntry('Arsip Soft Deleted', 'draft', 'pending', true);
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $response = $this->actingAs($admin)->get(route('admin.home'));
 
@@ -58,9 +59,9 @@ class AdminCulturalCurationTest extends TestCase
     public function test_verification_decisions_are_logged_without_changing_publication_status(): void
     {
         $entryId = $this->createEntry('Arsip untuk Ditinjau');
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
+        $superAdmin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
-        $this->actingAs($verifikator)
+        $this->actingAs($superAdmin)
             ->post(route('admin.curation.entries.verification', $entryId), [
                 'decision' => 'approve',
                 'notes' => 'Diperiksa dengan sumber yang tersedia.',
@@ -73,18 +74,18 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertNotNull($entry->verified_at);
 
         $log = DB::table('verification_logs')->where('cultural_entry_id', $entryId)->first();
-        $this->assertSame($verifikator->id, $log->reviewer_id);
+        $this->assertSame($superAdmin->id, $log->reviewer_id);
         $this->assertSame('verified', $log->decision);
         $this->assertStringContainsString('pending → verified', $log->notes);
     }
 
-    public function test_rejected_verification_keeps_pending_and_unpublishes_from_public_query(): void
+    public function test_rejected_verification_does_not_revoke_publication_approval(): void
     {
         $entryId = $this->createEntry('Arsip Perlu Perbaikan', 'published', 'verified');
         DB::table('cultural_entries')->where('id', $entryId)->update(['verified_at' => now()]);
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
+        $superAdmin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
-        $this->actingAs($verifikator)
+        $this->actingAs($superAdmin)
             ->post(route('admin.curation.entries.verification', $entryId), [
                 'decision' => 'reject',
                 'notes' => 'Sumber belum cukup untuk mendukung klaim.',
@@ -95,20 +96,21 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertSame('pending', $entry->verification_status);
         $this->assertSame('published', $entry->publication_status);
         $this->assertNull($entry->verified_at);
-        $this->assertSame(0, DB::table('cultural_entries')->where('id', $entryId)->where('verification_status', 'verified')->count());
+        $this->assertNotNull($entry->published_at);
+        $this->assertSame(1, DB::table('cultural_entries')->where('id', $entryId)->where('publication_status', 'published')->count());
 
         $log = DB::table('verification_logs')->where('cultural_entry_id', $entryId)->first();
         $this->assertSame('rejected', $log->decision);
-        $this->assertSame($verifikator->id, $log->reviewer_id);
+        $this->assertSame($superAdmin->id, $log->reviewer_id);
         $this->assertStringContainsString('Sumber belum cukup', $log->notes);
     }
 
     public function test_rejection_requires_a_reason_and_does_not_create_a_log_without_one(): void
     {
         $entryId = $this->createEntry('Arsip Tanpa Catatan');
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
+        $superAdmin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
-        $this->actingAs($verifikator)
+        $this->actingAs($superAdmin)
             ->from(route('admin.curation.entries.show', $entryId))
             ->post(route('admin.curation.entries.verification', $entryId), [
                 'decision' => 'reject',
@@ -119,29 +121,31 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertSame('pending', DB::table('cultural_entries')->find($entryId)->verification_status);
     }
 
-    public function test_verified_entry_can_be_published_intentionally_and_then_appear_publicly(): void
+    public function test_super_admin_can_approve_pending_entry_for_publication_without_media_permission(): void
     {
         $regionId = $this->createRegion('Jawa Barat');
         $entryId = $this->createEntry(
             'Angklung',
             'draft',
-            'verified',
+            'pending',
             false,
             $regionId,
             'Alat musik bambu tradisional yang dimainkan dengan cara digoyangkan.'
         );
         $this->createMedia($entryId, 'pending', 'foto-menunggu.jpg');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($admin)
             ->post(route('admin.curation.entries.publication', $entryId), [
                 'action' => 'publish',
                 'notes' => 'Diperiksa dan disetujui untuk publikasi.',
+                'return_to' => 'manage',
             ])
-            ->assertRedirect(route('admin.curation.entries.show', $entryId));
+            ->assertRedirect(route('admin.cultural-entries.manage'));
 
         $entry = DB::table('cultural_entries')->find($entryId);
         $this->assertSame('published', $entry->publication_status);
+        $this->assertSame('pending', $entry->verification_status);
         $this->assertNotNull($entry->published_at);
         $this->assertSame('pending', DB::table('media')->where('cultural_entry_id', $entryId)->value('permission_status'));
 
@@ -155,27 +159,118 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertStringContainsString('draft → published', $log->notes);
     }
 
-    public function test_unverified_entry_cannot_be_published(): void
+    public function test_legacy_verifikator_cannot_approve_publication(): void
     {
         $entryId = $this->createEntry('Belum Terverifikasi');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $verifikator = $this->createUser('verifikator');
 
-        $this->actingAs($admin)
+        $this->actingAs($verifikator)
             ->from(route('admin.curation.entries.show', $entryId))
             ->post(route('admin.curation.entries.publication', $entryId), [
                 'action' => 'publish',
             ])
-            ->assertRedirect(route('admin.curation.entries.show', $entryId))
-            ->assertSessionHas('publication_blockers');
+            ->assertForbidden();
 
         $this->assertSame('draft', DB::table('cultural_entries')->find($entryId)->publication_status);
         $this->assertSame(0, DB::table('verification_logs')->count());
     }
 
-    public function test_publishing_requires_a_valid_region_and_description_but_not_media(): void
+    public function test_super_admin_can_open_data_budaya_with_direct_publication_control(): void
+    {
+        $superAdmin = $this->createUser(User::ROLE_SUPER_ADMIN);
+
+        $this->actingAs($superAdmin)
+            ->get(route('admin.cultural-entries.manage'))
+            ->assertOk()
+            ->assertSee('data-publication-template', false)
+            ->assertSee('data-csrf-token', false)
+            ->assertSee('Publikasikan semua yang layak')
+            ->assertSee(route('admin.curation.entries.publication.bulk'));
+    }
+
+    public function test_bulk_publication_publishes_only_eligible_drafts_and_logs_each_decision(): void
+    {
+        $regionId = $this->createRegion('Jawa Barat');
+        $eligibleId = $this->createEntry(
+            'Entri Layak',
+            'draft',
+            'pending',
+            false,
+            $regionId,
+            'Deskripsi tersedia.'
+        );
+        $missingRegionId = $this->createEntry(
+            'Entri Tanpa Wilayah',
+            'draft',
+            'pending',
+            false,
+            null,
+            'Deskripsi tersedia.'
+        );
+        $deletedId = $this->createEntry(
+            'Entri Terhapus',
+            'draft',
+            'pending',
+            true,
+            $regionId,
+            'Deskripsi tersedia.'
+        );
+        $superAdmin = $this->createUser(User::ROLE_SUPER_ADMIN);
+
+        $this->actingAs($superAdmin)
+            ->post(route('admin.curation.entries.publication.bulk'), [
+                'confirm_bulk_publish' => '1',
+            ])
+            ->assertRedirect(route('admin.cultural-entries.manage'))
+            ->assertSessionHas('status', '1 entri berhasil dipublikasikan; 1 entri dilewati karena syarat publikasi belum terpenuhi.')
+            ->assertSessionHas('publication_bulk_skipped');
+
+        $this->assertSame('published', DB::table('cultural_entries')->find($eligibleId)->publication_status);
+        $this->assertSame('pending', DB::table('cultural_entries')->find($eligibleId)->verification_status);
+        $this->assertSame('draft', DB::table('cultural_entries')->find($missingRegionId)->publication_status);
+        $this->assertSame('draft', DB::table('cultural_entries')->withTrashed()->find($deletedId)->publication_status);
+        $this->assertSame(1, DB::table('verification_logs')->where('cultural_entry_id', $eligibleId)->where('decision', 'published')->count());
+    }
+
+    public function test_explicit_publication_decisions_are_logged_and_repeated_approval_is_audited(): void
+    {
+        $regionId = $this->createRegion('Jawa Barat');
+        $entryId = $this->createEntry(
+            'Publikasi Pending',
+            'draft',
+            'pending',
+            false,
+            $regionId,
+            'Deskripsi arsip budaya.'
+        );
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
+
+        $this->actingAs($admin)
+            ->post(route('admin.curation.entries.publication', $entryId), [
+                'action' => 'publish',
+                'notes' => 'Disetujui untuk Arsip.',
+            ])
+            ->assertRedirect(route('admin.curation.entries.show', $entryId));
+
+        $publishedAt = DB::table('cultural_entries')->find($entryId)->published_at;
+        $this->actingAs($admin)
+            ->post(route('admin.curation.entries.publication', $entryId), [
+                'action' => 'publish',
+            ])
+            ->assertRedirect(route('admin.curation.entries.show', $entryId));
+
+        $this->assertSame($publishedAt, DB::table('cultural_entries')->find($entryId)->published_at);
+        $this->assertSame(2, DB::table('verification_logs')->where('cultural_entry_id', $entryId)->count());
+        $this->assertSame(
+            ['published', 'published'],
+            DB::table('verification_logs')->where('cultural_entry_id', $entryId)->orderBy('id')->pluck('decision')->all()
+        );
+    }
+
+    public function test_publishing_requires_a_valid_region_and_description_but_not_verification_or_media(): void
     {
         $entryId = $this->createEntry('Informasi Belum Lengkap', 'draft', 'verified');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($admin)
             ->from(route('admin.curation.entries.show', $entryId))
@@ -234,7 +329,7 @@ class AdminCulturalCurationTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $response = $this->actingAs($admin)->get(route('admin.curation.entries.show', $entryId));
 
@@ -254,7 +349,7 @@ class AdminCulturalCurationTest extends TestCase
     {
         $entryId = $this->createEntry('Arsip Foto');
         $mediaId = $this->createMedia($entryId, 'granted', 'foto-bermasalah.jpg');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($admin)
             ->post(route('admin.curation.media.permission', [$entryId, $mediaId]), [
@@ -277,7 +372,7 @@ class AdminCulturalCurationTest extends TestCase
     {
         $entryId = $this->createEntry('Arsip dengan Izin');
         $mediaId = $this->createMedia($entryId, 'pending', 'foto-berizin.jpg');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $this->actingAs($admin)
             ->post(route('admin.curation.media.permission', [$entryId, $mediaId]), [
@@ -293,6 +388,97 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertStringContainsString('Surat izin pemegang hak diperiksa.', $log->notes);
     }
 
+    public function test_admin_dashboard_shows_pending_media_preview_source_and_license(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('cultural/angklung.jpg', 'image-content');
+
+        $entryId = $this->createEntry('Angklung');
+        $mediaId = $this->createMedia($entryId, 'pending', 'cultural/angklung.jpg');
+        DB::table('media')->where('id', $mediaId)->update([
+            'external_url' => 'https://commons.wikimedia.org/wiki/File:Angklung.jpg',
+            'creator' => 'Dokumentator Budaya',
+            'license' => 'CC BY-SA 4.0',
+            'alt_text' => 'Angklung bambu dalam sebuah pertunjukan.',
+        ]);
+        $sourceId = DB::table('sources')->insertGetId([
+            'source_type' => 'website',
+            'title' => 'Dokumentasi Angklung',
+            'url' => 'https://example.test/angklung',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('cultural_entry_source')->insert([
+            'cultural_entry_id' => $entryId,
+            'source_id' => $sourceId,
+        ]);
+
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
+        $response = $this->actingAs($admin)->get(route('admin.home'));
+
+        $response
+            ->assertOk()
+            ->assertSee('Media menunggu persetujuan')
+            ->assertSee('Angklung bambu dalam sebuah pertunjukan.')
+            ->assertSee('https://commons.wikimedia.org/wiki/File:Angklung.jpg')
+            ->assertSee('CC BY-SA 4.0')
+            ->assertSee('https://example.test/angklung')
+            ->assertSee('Setujui semua 1 media yang memenuhi syarat');
+    }
+
+    public function test_bulk_media_approval_grants_only_eligible_pending_media_and_logs_each_decision(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('cultural/angklung.jpg', 'image-content');
+
+        $entryId = $this->createEntry('Angklung');
+        $eligibleMediaId = $this->createMedia($entryId, 'pending', 'cultural/angklung.jpg');
+        DB::table('media')->where('id', $eligibleMediaId)->update([
+            'external_url' => 'https://commons.wikimedia.org/wiki/File:Angklung.jpg',
+            'creator' => 'Dokumentator Budaya',
+            'license' => 'CC BY-SA 4.0',
+            'alt_text' => 'Angklung bambu dalam sebuah pertunjukan.',
+        ]);
+
+        $ineligibleMediaId = $this->createMedia($entryId, 'pending', 'cultural/angklung.jpg');
+        DB::table('media')->where('id', $ineligibleMediaId)->update([
+            'external_url' => 'https://commons.wikimedia.org/wiki/File:Angklung.jpg',
+            'creator' => 'Dokumentator Budaya',
+            'license' => 'Lisensi tidak diketahui',
+            'alt_text' => 'Foto tanpa lisensi yang dikenali.',
+        ]);
+
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
+        $this->actingAs($admin)
+            ->post(route('admin.curation.media.permission.bulk'), [
+                'return_to' => 'media-sources',
+            ])
+            ->assertRedirect(route('admin.media-sources.page'))
+            ->assertSessionHas('status', '1 media pending disetujui; 1 media dilewati karena belum memenuhi syarat.')
+            ->assertSessionHas('media_bulk_skipped')
+            ->assertSessionHas('media_bulk_granted_count', 1);
+
+        $this->assertSame('granted', DB::table('media')->find($eligibleMediaId)->permission_status);
+        $this->assertSame('pending', DB::table('media')->find($ineligibleMediaId)->permission_status);
+        $this->assertSame('draft', DB::table('cultural_entries')->find($entryId)->publication_status);
+        $this->assertSame(1, DB::table('verification_logs')->where('decision', 'media_granted')->count());
+        $this->assertSame($admin->id, DB::table('verification_logs')->where('decision', 'media_granted')->value('reviewer_id'));
+    }
+
+    public function test_legacy_verifikator_cannot_bulk_grant_pending_media(): void
+    {
+        $entryId = $this->createEntry('Media dibatasi');
+        $mediaId = $this->createMedia($entryId, 'pending', 'cultural/angklung.jpg');
+        $verifikator = $this->createUser('verifikator');
+
+        $this->actingAs($verifikator)
+            ->post(route('admin.curation.media.permission.bulk'))
+            ->assertForbidden();
+
+        $this->assertSame('pending', DB::table('media')->find($mediaId)->permission_status);
+        $this->assertSame(0, DB::table('verification_logs')->count());
+    }
+
     public function test_admin_dashboard_filters_and_paginates_without_hiding_pending_entries(): void
     {
         $regionId = $this->createRegion('Bali');
@@ -305,7 +491,7 @@ class AdminCulturalCurationTest extends TestCase
             ]);
         }
         $this->createEntry('Wayang Jawa');
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $response = $this->actingAs($admin)->get(route('admin.home', [
             'search' => 'Tari',
@@ -322,28 +508,28 @@ class AdminCulturalCurationTest extends TestCase
         $this->assertStringContainsString('verification_status=pending', $entries->url(2));
     }
 
-    public function test_admin_permissions_separate_verification_from_publication_and_media(): void
+    public function test_legacy_roles_cannot_verify_publish_or_manage_media(): void
     {
         $entryId = $this->createEntry('Arsip Dibatasi');
         $mediaId = $this->createMedia($entryId, 'pending');
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $legacyVerifier = $this->createUser('verifikator');
+        $legacyAdmin = $this->createUser('admin');
 
         $this->post(route('admin.curation.entries.verification', $entryId), [
             'decision' => 'approve',
         ])->assertRedirect(route('admin.login'));
 
-        $this->actingAs($admin)
+        $this->actingAs($legacyAdmin)
             ->post(route('admin.curation.entries.verification', $entryId), [
                 'decision' => 'approve',
             ])
             ->assertForbidden();
 
-        $this->actingAs($verifikator)
+        $this->actingAs($legacyVerifier)
             ->post(route('admin.curation.entries.publication', $entryId), ['action' => 'publish'])
             ->assertForbidden();
 
-        $this->actingAs($verifikator)
+        $this->actingAs($legacyVerifier)
             ->post(route('admin.curation.media.permission', [$entryId, $mediaId]), [
                 'decision' => 'grant',
                 'notes' => 'Lisensi sudah diperiksa.',

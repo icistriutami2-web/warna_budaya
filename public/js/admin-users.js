@@ -4,10 +4,8 @@
 
     const api = {
         index: config.dataset.indexUrl,
-        store: config.dataset.storeUrl,
         show: config.dataset.showTemplate,
         update: config.dataset.updateTemplate,
-        status: config.dataset.statusTemplate,
         password: config.dataset.passwordTemplate,
     };
     const rows = document.querySelector('[data-user-rows]');
@@ -21,7 +19,6 @@
     const toast = document.querySelector('[data-user-toast]');
     const passwordDialog = document.querySelector('[data-password-dialog]');
     const passwordForm = document.querySelector('[data-password-form]');
-    const roleField = form.elements.role;
     let activeUrl = api.index;
     let editingUser = null;
     let resetUser = null;
@@ -32,28 +29,12 @@
     const escapePath = (template, id) => template.replace('__id__', encodeURIComponent(id));
     const labelRole = (role) => ({
         super_admin: 'Super Admin',
-        admin: 'Admin',
-        verifikator: 'Verifikator',
     }[role] || role || '—');
     const formatDate = (value) => {
         if (!value) return '—';
         const date = new Date(value);
         return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(date);
     };
-    const setRoleOptions = (role, disabled = false) => {
-        const options = role === 'super_admin'
-            ? [['super_admin', 'Super Admin']]
-            : [['admin', 'Admin'], ['verifikator', 'Verifikator']];
-        roleField.replaceChildren(...options.map(([value, label]) => {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = label;
-            return option;
-        }));
-        roleField.value = role;
-        roleField.disabled = disabled;
-    };
-
     async function request(url, options = {}) {
         const response = await fetch(url, {
             credentials: 'same-origin',
@@ -142,7 +123,6 @@
             const statusCell = document.createElement('td');
             const status = document.createElement('span');
             const loginStatusAvailable = typeof user.login_active === 'boolean';
-            const accountStatusAvailable = typeof user.is_active === 'boolean';
             status.className = `ua-status ${loginStatusAvailable
                 ? (user.login_active ? 'ua-status-active' : 'ua-status-inactive')
                 : 'ua-status-unavailable'}`;
@@ -163,12 +143,6 @@
             const reset = actionButton('Reset sandi', 'reset');
             reset.dataset.userId = user.id;
             actions.append(reset);
-            if (accountStatusAvailable && user.role !== 'super_admin' && user.id !== Number(document.body.dataset.authUserId)) {
-                const statusAction = actionButton(user.is_active ? 'Nonaktifkan' : 'Aktifkan', 'status', user.is_active);
-                statusAction.dataset.userId = user.id;
-                statusAction.dataset.nextStatus = String(!user.is_active);
-                actions.append(statusAction);
-            }
             actionsCell.append(actions);
             row.append(nameCell, emailCell, roleCell, statusCell, createdCell, actionsCell);
             rows.append(row);
@@ -244,21 +218,6 @@
         element.hidden = false;
     }
 
-    function openCreate() {
-        editingUser = null;
-        form.reset();
-        form.elements.name.disabled = false;
-        form.elements.email.disabled = false;
-        setRoleOptions('admin');
-        document.querySelector('[data-user-password-fields]').hidden = false;
-        form.elements.password.required = true;
-        form.elements.password_confirmation.required = true;
-        document.querySelector('[data-user-form-title]').textContent = 'Tambah akun';
-        document.querySelector('[data-user-submit]').textContent = 'Simpan akun';
-        document.querySelector('[data-user-form-error]').hidden = true;
-        dialog.showModal();
-    }
-
     async function openEdit(id) {
         try {
             const result = await request(escapePath(api.show, id));
@@ -266,17 +225,6 @@
             form.reset();
             form.elements.name.value = editingUser.name || '';
             form.elements.email.value = editingUser.email || '';
-            const isSuperAdmin = editingUser.role === 'super_admin';
-            const cannotChangeRole = isSuperAdmin
-                || editingUser.id === Number(document.body.dataset.authUserId);
-            setRoleOptions(editingUser.role, cannotChangeRole);
-            form.elements.name.disabled = false;
-            form.elements.email.disabled = false;
-            document.querySelector('[data-user-password-fields]').hidden = true;
-            form.elements.password.required = false;
-            form.elements.password_confirmation.required = false;
-            document.querySelector('[data-user-form-title]').textContent = 'Edit akun pengelola';
-            document.querySelector('[data-user-submit]').textContent = 'Simpan perubahan';
             document.querySelector('[data-user-form-error]').hidden = true;
             dialog.showModal();
         } catch (error) {
@@ -291,24 +239,16 @@
         errorBox.hidden = true;
         submit.disabled = true;
         const values = Object.fromEntries(new FormData(form).entries());
-        const payload = {
-            name: values.name,
-            email: values.email,
-        };
-        if (!editingUser) {
-            payload.role = values.role;
-            payload.password = values.password;
-            payload.password_confirmation = values.password_confirmation;
-        } else if (!form.elements.role.disabled) {
-            payload.role = values.role;
-        }
         try {
-            await request(editingUser ? escapePath(api.update, editingUser.id) : api.store, {
-                method: editingUser ? 'PUT' : 'POST',
-                body: JSON.stringify(payload),
+            await request(escapePath(api.update, editingUser.id), {
+                method: 'PUT',
+                body: JSON.stringify({
+                    name: values.name,
+                    email: values.email,
+                }),
             });
             dialog.close();
-            showToast(editingUser ? 'Informasi akun diperbarui.' : 'Akun pengelola berhasil dibuat.');
+            showToast('Informasi akun diperbarui.');
             await load(activeUrl);
         } catch (error) {
             setFormError(errorBox, error.message);
@@ -337,24 +277,6 @@
             passwordDialog.showModal();
             return;
         }
-        if (button.dataset.action === 'status') {
-            const nextStatus = button.dataset.nextStatus === 'true';
-            const accountName = button.closest('tr').querySelector('.ua-account-name').textContent;
-            const action = nextStatus ? 'mengaktifkan' : 'menonaktifkan';
-            if (!window.confirm(`Yakin ingin ${action} akun ${accountName}?`)) return;
-            button.disabled = true;
-            try {
-                await request(escapePath(api.status, id), {
-                    method: 'PATCH',
-                    body: JSON.stringify({ is_active: nextStatus }),
-                });
-                showToast(nextStatus ? 'Akun berhasil diaktifkan.' : 'Akun berhasil dinonaktifkan.');
-                await load(activeUrl);
-            } catch (error) {
-                showFeedback(error.message, true);
-                button.disabled = false;
-            }
-        }
     });
 
     passwordForm.addEventListener('submit', async (event) => {
@@ -377,7 +299,6 @@
         }
     });
 
-    document.querySelector('[data-user-create]').addEventListener('click', openCreate);
     document.querySelectorAll('[data-user-close]').forEach((button) => {
         button.addEventListener('click', () => dialog.close());
     });

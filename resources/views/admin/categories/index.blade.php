@@ -28,7 +28,7 @@
             <h1>Kategori <em>Budaya.</em></h1>
             <p>Susun ragam ekspresi budaya dalam katalog yang tertata, jelas, dan mudah dijelajahi.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>RUMPUN<br>BUDAYA</small></div>
+        <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
     </section>
 
     @unless ($categoryApiReady && $categoryPageReady)

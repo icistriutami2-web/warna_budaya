@@ -50,6 +50,20 @@ php artisan serve
 
 Buka alamat yang ditampilkan, biasanya `http://127.0.0.1:8000`.
 
+## AI Sahabat Budaya
+
+Widget AI menggunakan Gemini API `generateContent`. Atur API key secara lokal di `.env`; key hanya digunakan server dan tidak dikirim ke frontend:
+
+```env
+GEMINI_API_KEY=isi_api_key_gemini_anda
+GEMINI_MODEL=gemini-3.6-flash
+GEMINI_TIMEOUT=35
+```
+
+Model default `gemini-3.6-flash` tercantum sebagai model stabil pada dokumentasi Gemini. Tanpa API key, widget tetap dapat dibuka tetapi server akan menampilkan status konfigurasi yang jelas ketika pesan dikirim. Jika kuota atau batas penggunaan Gemini tercapai, widget menampilkan pesan kuota dan endpoint membatasi pengiriman hingga 10 pesan per menit per pengguna.
+
+Dokumentasi: [Gemini API — Generate content](https://ai.google.dev/api/generate-content/generate-content) dan [model Gemini](https://ai.google.dev/gemini-api/docs/models).
+
 ## Catatan
 
 - Project ini adalah fondasi Laravel, belum seluruh fitur produk selesai.

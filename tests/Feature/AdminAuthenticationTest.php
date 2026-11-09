@@ -97,16 +97,33 @@ class AdminAuthenticationTest extends TestCase
             ->assertRedirect(route('admin.home'));
     }
 
-    public function test_admin_and_verifikator_cannot_use_the_super_admin_entry_but_keep_dashboard_access(): void
+    public function test_both_existing_super_admin_accounts_can_authenticate(): void
     {
-        foreach ([User::ROLE_ADMIN, User::ROLE_VERIFIKATOR] as $role) {
+        $accounts = [
+            $this->createUser(User::ROLE_SUPER_ADMIN, 'super-one@example.test', 'correct-password'),
+            $this->createUser(User::ROLE_SUPER_ADMIN, 'super-two@example.test', 'correct-password'),
+        ];
+
+        foreach ($accounts as $account) {
+            $this->post(route('admin.login.store'), [
+                'email' => $account->email,
+                'password' => 'correct-password',
+            ])->assertRedirect(route('admin.home'));
+            $this->assertAuthenticatedAs($account);
+            $this->post(route('admin.logout'))->assertRedirect(route('admin.login'));
+        }
+    }
+
+    public function test_legacy_roles_cannot_access_the_admin_dashboard(): void
+    {
+        foreach (['admin', 'verifikator'] as $role) {
             $user = $this->createUser($role, $role.'@example.test', 'correct-password');
 
             $this->actingAs($user)
                 ->get(route('admin.super-entry'))
                 ->assertForbidden();
 
-            $this->get(route('admin.home'))->assertOk();
+            $this->get(route('admin.home'))->assertForbidden();
         }
     }
 
@@ -122,12 +139,12 @@ class AdminAuthenticationTest extends TestCase
 
     public function test_successful_login_returns_to_a_safe_intended_admin_page(): void
     {
-        $this->createUser(User::ROLE_ADMIN, 'admin@example.test', 'correct-password');
+        $this->createUser(User::ROLE_SUPER_ADMIN, 'super@example.test', 'correct-password');
 
         $this->withSession([
             'url.intended' => route('admin.regions.page').'?search=Jawa',
         ])->post(route('admin.login.store'), [
-            'email' => 'admin@example.test',
+            'email' => 'super@example.test',
             'password' => 'correct-password',
         ])->assertRedirect(route('admin.regions.page').'?search=Jawa');
 
@@ -136,17 +153,17 @@ class AdminAuthenticationTest extends TestCase
 
     public function test_login_rejects_an_external_intended_url(): void
     {
-        $this->createUser(User::ROLE_ADMIN, 'admin@example.test', 'correct-password');
+        $this->createUser(User::ROLE_SUPER_ADMIN, 'super@example.test', 'correct-password');
 
         $this->withSession([
             'url.intended' => 'https://attacker.example/admin/regions/manage',
         ])->post(route('admin.login.store'), [
-            'email' => 'admin@example.test',
+            'email' => 'super@example.test',
             'password' => 'correct-password',
         ])->assertRedirect(route('admin.home'));
     }
 
-    public function test_admin_home_denies_users_without_a_role_and_allows_admin_roles(): void
+    public function test_admin_home_denies_users_without_super_admin_role(): void
     {
         $unassigned = new User;
         $this->actingAs($unassigned)
@@ -155,31 +172,40 @@ class AdminAuthenticationTest extends TestCase
 
         $this->get(route('admin.login'))->assertForbidden();
 
-        $admin = new User;
-        $admin->role = User::ROLE_ADMIN;
-        $this->actingAs($admin)
+        foreach (['admin', 'verifikator'] as $role) {
+            $legacyUser = new User;
+            $legacyUser->role = $role;
+            $this->actingAs($legacyUser)->get(route('admin.home'))->assertForbidden();
+        }
+
+        $superAdmin = new User;
+        $superAdmin->role = User::ROLE_SUPER_ADMIN;
+        $this->actingAs($superAdmin)
             ->get(route('admin.home'))
             ->assertOk()
             ->assertSee('Dashboard Kurasi');
     }
 
-    public function test_taxonomy_pages_allow_managers_and_deny_verifikator_or_unassigned_users(): void
+    public function test_taxonomy_pages_allow_super_admin_and_deny_legacy_or_unassigned_users(): void
     {
-        $admin = new User;
-        $admin->role = User::ROLE_ADMIN;
-        $verifikator = new User;
-        $verifikator->role = User::ROLE_VERIFIKATOR;
+        $superAdmin = new User;
+        $superAdmin->role = User::ROLE_SUPER_ADMIN;
+        $legacyUsers = [];
+        foreach (['admin', 'verifikator'] as $role) {
+            $user = new User;
+            $user->role = $role;
+            $legacyUsers[] = $user;
+        }
         $unassigned = new User;
 
         foreach (['admin.regions.page', 'admin.categories.page'] as $routeName) {
-            $this->actingAs($admin)
+            $this->actingAs($superAdmin)
                 ->get(route($routeName))
                 ->assertOk();
 
-            $this->actingAs($verifikator)
-                ->get(route($routeName))
-                ->assertForbidden();
-
+            foreach ($legacyUsers as $legacyUser) {
+                $this->actingAs($legacyUser)->get(route($routeName))->assertForbidden();
+            }
             $this->actingAs($unassigned)
                 ->get(route($routeName))
                 ->assertForbidden();
@@ -216,22 +242,29 @@ class AdminAuthenticationTest extends TestCase
         }
     }
 
-    public function test_admin_roles_receive_only_their_defined_permissions(): void
+    public function test_only_super_admin_receives_management_and_verification_permissions(): void
     {
         $superAdmin = new User;
         $superAdmin->role = User::ROLE_SUPER_ADMIN;
-        $admin = new User;
-        $admin->role = User::ROLE_ADMIN;
-        $verifikator = new User;
-        $verifikator->role = User::ROLE_VERIFIKATOR;
+        $legacyAdmin = new User;
+        $legacyAdmin->role = 'admin';
+        $legacyVerifier = new User;
+        $legacyVerifier->role = 'verifikator';
         $unassigned = new User;
 
         $this->assertTrue(Gate::forUser($superAdmin)->allows('admin-access'));
         $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-admin-accounts'));
-        $this->assertTrue(Gate::forUser($admin)->allows('manage-cultural-content'));
-        $this->assertFalse(Gate::forUser($admin)->allows('manage-admin-accounts'));
-        $this->assertTrue(Gate::forUser($verifikator)->allows('verify-content'));
-        $this->assertFalse(Gate::forUser($verifikator)->allows('manage-cultural-content'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-cultural-content'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-media'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-sources'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-regions'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('manage-categories'));
+        $this->assertTrue(Gate::forUser($superAdmin)->allows('verify-content'));
+        foreach ([$legacyAdmin, $legacyVerifier, $unassigned] as $user) {
+            $this->assertFalse(Gate::forUser($user)->allows('admin-access'));
+            $this->assertFalse(Gate::forUser($user)->allows('manage-cultural-content'));
+            $this->assertFalse(Gate::forUser($user)->allows('verify-content'));
+        }
         $this->assertFalse(Gate::forUser($unassigned)->allows('admin-access'));
     }
 

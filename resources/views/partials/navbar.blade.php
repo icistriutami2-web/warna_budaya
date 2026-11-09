@@ -1,10 +1,10 @@
 <header class="site-header">
     <nav class="navigation page-shell" aria-label="Navigasi utama">
         <a class="brand" href="{{ route('home') }}" aria-label="WARNA BUDAYA, Beranda">
-            <span class="brand-mark" aria-hidden="true">W</span>
+            <img class="brand-mark" src="{{ asset('images/brand-emblem.svg') }}" alt="">
             <span class="brand-copy">
                 <span class="brand-name">WARNA BUDAYA</span>
-                <span class="brand-tagline">Kenali · Jelajahi · Lestarikan</span>
+                <span class="brand-tagline">Jaga Budaya, Lestarikan Negeri</span>
             </span>
         </a>
 
@@ -16,10 +16,11 @@
             <div class="navigation-links">
                 <a class="navigation-link" href="{{ route('home') }}">Beranda</a>
                 <a class="navigation-link" href="{{ route('regions.index') }}">Jelajah Nusantara</a>
+                <a class="navigation-link" href="{{ route('cultural-map.index') }}">Peta Interaktif</a>
                 <a class="navigation-link" href="{{ route('home') }}#kategori">Kategori Budaya</a>
                 <a class="navigation-link" href="{{ route('cultural-entries.index') }}">Arsip Budaya</a>
-                <a class="navigation-link" href="{{ route('home') }}#cerita">Cerita Nusantara</a>
-                <a class="navigation-link" href="{{ route('home') }}#tentang">Tentang Kami</a>
+                <a class="navigation-link" href="{{ route('digital-books.index') }}">Cerita Nusantara</a>
+                <a class="navigation-link" href="{{ route('about') }}">Tentang Kami</a>
             </div>
             <div class="navigation-actions">
                 <a class="icon-link" href="{{ route('cultural-entries.index') }}" aria-label="Cari arsip budaya">

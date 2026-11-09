@@ -32,7 +32,6 @@ class UserManagementController extends Controller
         $sessionCutoff = now()->subMinutes((int) config('session.lifetime'))->timestamp;
         $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
-            'role' => ['nullable', Rule::in(User::ROLES)],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
@@ -47,7 +46,7 @@ class UserManagementController extends Controller
         }
 
         $users = User::query()
-            ->when(isset($filters['role']), fn (Builder $query) => $query->where('role', $filters['role']))
+            ->where('role', User::ROLE_SUPER_ADMIN)
             ->when($loginStatusAvailable && isset($filters['status']), function (Builder $query) use (
                 $filters,
                 $sessionTable,
@@ -124,48 +123,11 @@ class UserManagementController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
-    {
-        $this->ensureStatusColumnExists();
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
-            'role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_VERIFIKATOR])],
-            'password' => ['required', 'string', 'min:12', 'confirmed'],
-        ]);
-
-        try {
-            $user = DB::transaction(function () use ($data): User {
-                $user = new User;
-                $user->forceFill([
-                    'name' => $data['name'],
-                    'email' => Str::lower($data['email']),
-                    'role' => $data['role'],
-                    'is_active' => true,
-                    'password' => Hash::make($data['password']),
-                ]);
-                $user->save();
-
-                return $user;
-            });
-        } catch (UniqueConstraintViolationException) {
-            return response()->json([
-                'message' => 'Email sudah digunakan.',
-                'errors' => ['email' => ['Email sudah digunakan.']],
-            ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
-        }
-
-        return response()->json([
-            'message' => 'Akun pengelola berhasil dibuat.',
-            'data' => $this->userData($user),
-        ], JsonResponse::HTTP_CREATED);
-    }
-
     public function show(int $user): JsonResponse
     {
         return response()->json([
             'data' => $this->userData(
-                User::query()->whereIn('role', User::ROLES)->findOrFail($user),
+                User::query()->where('role', User::ROLE_SUPER_ADMIN)->findOrFail($user),
                 Schema::hasColumn('users', 'is_active')
             ),
         ]);
@@ -173,10 +135,7 @@ class UserManagementController extends Controller
 
     public function update(Request $request, int $user): JsonResponse
     {
-        $account = User::query()->whereIn('role', User::ROLES)->findOrFail($user);
-        $roleRules = $account->id === Auth::id() || $account->role === User::ROLE_SUPER_ADMIN
-            ? ['prohibited']
-            : ['sometimes', 'required', Rule::in([User::ROLE_ADMIN, User::ROLE_VERIFIKATOR])];
+        $account = User::query()->where('role', User::ROLE_SUPER_ADMIN)->findOrFail($user);
         $rules = [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'email' => [
@@ -187,7 +146,7 @@ class UserManagementController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($account->id),
             ],
-            'role' => $roleRules,
+            'role' => ['prohibited'],
         ];
         $data = $request->validate($rules);
 
@@ -195,21 +154,9 @@ class UserManagementController extends Controller
             $account = DB::transaction(function () use ($account, $data): User {
                 $account = User::query()->lockForUpdate()->findOrFail($account->id);
 
-                if ($account->role === User::ROLE_SUPER_ADMIN && array_key_exists('role', $data)) {
-                    abort(JsonResponse::HTTP_CONFLICT, 'Role Super Admin tidak dapat diubah melalui endpoint ini.');
-                }
-
-                if ($account->id === Auth::id() && array_key_exists('role', $data)) {
-                    abort(JsonResponse::HTTP_CONFLICT, 'Role akun yang sedang digunakan tidak dapat diubah.');
-                }
-
-                $attributes = collect($data)->only(['name', 'email', 'role'])->all();
+                $attributes = collect($data)->only(['name', 'email'])->all();
                 if (isset($attributes['email'])) {
                     $attributes['email'] = Str::lower($attributes['email']);
-                }
-                if (array_key_exists('role', $attributes)) {
-                    $account->role = $attributes['role'];
-                    unset($attributes['role']);
                 }
                 $account->fill($attributes)->save();
 
@@ -232,7 +179,7 @@ class UserManagementController extends Controller
     {
         $this->ensureStatusColumnExists();
         $data = $request->validate(['is_active' => ['required', 'boolean']]);
-        $account = User::query()->whereIn('role', User::ROLES)->findOrFail($user);
+        $account = User::query()->where('role', User::ROLE_SUPER_ADMIN)->findOrFail($user);
 
         if (! $data['is_active'] && $account->role === User::ROLE_SUPER_ADMIN) {
             return response()->json([
@@ -274,7 +221,7 @@ class UserManagementController extends Controller
         $data = $request->validate([
             'password' => ['required', 'string', 'min:12', 'confirmed'],
         ]);
-        $account = User::query()->whereIn('role', User::ROLES)->findOrFail($user);
+        $account = User::query()->where('role', User::ROLE_SUPER_ADMIN)->findOrFail($user);
 
         DB::transaction(function () use ($account, $data): void {
             $account = User::query()->lockForUpdate()->findOrFail($account->id);

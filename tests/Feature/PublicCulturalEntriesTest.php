@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class PublicCulturalEntriesTest extends TestCase
@@ -23,32 +24,66 @@ class PublicCulturalEntriesTest extends TestCase
         $this->createSchema();
     }
 
-    public function test_archive_only_shows_published_verified_entries_and_granted_media(): void
+    public function test_archive_only_shows_published_entries_and_granted_media_with_a_location(): void
     {
-        $visibleId = $this->createEntry('Arsip Terverifikasi');
+        $visibleId = $this->createEntry('Arsip Disetujui');
         $this->createEntry('Arsip Draft', 'draft', 'verified');
-        $this->createEntry('Arsip Belum Terverifikasi', 'published', 'pending');
+        $unverifiedId = $this->createEntry('Arsip Belum Terverifikasi', 'published', 'pending');
         $deletedId = $this->createEntry('Arsip Terhapus');
         DB::table('cultural_entries')->where('id', $deletedId)->update(['deleted_at' => now()]);
 
-        $this->createMedia($visibleId, 'granted');
+        $this->createMedia($visibleId, 'granted', 'images/arsip-disetujui.jpg');
         $this->createMedia($visibleId, 'pending');
         $this->createMedia($visibleId, 'approved');
+        $this->createMedia($visibleId, 'granted');
+        $this->createMedia($unverifiedId, 'granted', null, 'https://example.test/arsip.jpg');
 
         $response = $this->get('/arsip-budaya');
 
         $response
             ->assertOk()
-            ->assertSee('Arsip Terverifikasi')
+            ->assertSee('Arsip Disetujui')
             ->assertDontSee('Arsip Draft')
-            ->assertDontSee('Arsip Belum Terverifikasi')
+            ->assertSee('Arsip Belum Terverifikasi')
             ->assertDontSee('Arsip Terhapus');
 
         $entries = $response->viewData('entries');
         $this->assertSame(
-            ['granted'],
-            $entries->first()->media->pluck('permission_status')->all()
+            ['images/arsip-disetujui.jpg'],
+            $entries->firstWhere('id', $visibleId)->media->pluck('file_path')->all()
         );
+        $this->assertSame(
+            ['https://example.test/arsip.jpg'],
+            $entries->firstWhere('id', $unverifiedId)->media->pluck('external_url')->all()
+        );
+    }
+
+    public function test_private_cultural_media_is_served_only_when_granted_and_published(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('cultural/test-image.jpg', 'image bytes');
+
+        $entryId = $this->createEntry('Foto Privat');
+        $mediaId = DB::table('media')->insertGetId([
+            'cultural_entry_id' => $entryId,
+            'media_type' => 'image',
+            'file_path' => 'cultural/test-image.jpg',
+            'permission_status' => 'pending',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->get(route('cultural-media.show', $mediaId))->assertNotFound();
+
+        DB::table('media')->where('id', $mediaId)->update(['permission_status' => 'granted']);
+        $this->get(route('cultural-media.show', $mediaId))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'max-age=0, no-store, private')
+            ->assertHeader('Content-Type', 'image/jpeg')
+            ->assertHeader('X-Content-Type-Options', 'nosniff');
+
+        DB::table('cultural_entries')->where('id', $entryId)->update(['publication_status' => 'draft']);
+        $this->get(route('cultural-media.show', $mediaId))->assertNotFound();
     }
 
     public function test_search_and_pagination_continue_to_work_for_public_entries(): void
@@ -66,6 +101,233 @@ class PublicCulturalEntriesTest extends TestCase
         $this->assertSame(13, $entries->total());
         $this->assertCount(12, $entries->items());
         $this->assertStringContainsString('search=Wayang', $entries->url(2));
+    }
+
+    public function test_archive_filters_by_active_province_and_category_and_preserves_filters_in_pagination(): void
+    {
+        $regionId = $this->createRegion('Jawa Barat', 'jawa-barat');
+        $otherRegionId = $this->createRegion('Bali', 'bali');
+        $categoryId = $this->createCategory('Seni Pertunjukan', 'seni-pertunjukan');
+        $otherCategoryId = $this->createCategory('Kerajinan', 'kerajinan');
+
+        foreach (range(1, 13) as $number) {
+            $entryId = $this->createEntry(sprintf('Wayang %02d', $number));
+            DB::table('cultural_entries')->where('id', $entryId)->update(['origin_region_id' => $regionId]);
+            DB::table('category_cultural_entry')->insert([
+                'cultural_entry_id' => $entryId,
+                'category_id' => $categoryId,
+            ]);
+        }
+
+        $pendingEntryId = $this->createEntry('Wayang 14', 'published', 'pending');
+        DB::table('cultural_entries')->where('id', $pendingEntryId)->update(['origin_region_id' => $regionId]);
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $pendingEntryId,
+            'category_id' => $categoryId,
+        ]);
+
+        $otherEntryId = $this->createEntry('Wayang Bali');
+        DB::table('cultural_entries')->where('id', $otherEntryId)->update(['origin_region_id' => $otherRegionId]);
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $otherEntryId,
+            'category_id' => $otherCategoryId,
+        ]);
+
+        $response = $this->get("/arsip-budaya?search=Wayang&region_id={$regionId}&category_id={$categoryId}");
+
+        $response
+            ->assertOk()
+            ->assertSee('Wayang 01')
+            ->assertDontSee('Wayang Bali')
+            ->assertSee('Jawa Barat')
+            ->assertSee('Seni Pertunjukan');
+
+        $entries = $response->viewData('entries');
+        $this->assertSame(14, $entries->total());
+        $this->assertStringContainsString("region_id={$regionId}", $entries->url(2));
+        $this->assertStringContainsString("category_id={$categoryId}", $entries->url(2));
+        $this->assertStringContainsString('search=Wayang', $entries->url(2));
+        $this->get($entries->url(2))->assertOk()->assertSee('Wayang 14');
+    }
+
+    public function test_archive_filters_only_offer_active_provinces_and_categories(): void
+    {
+        $this->createRegion('Provinsi Aktif', 'provinsi-aktif');
+        $this->createRegion('Kota Nonaktif', 'kota-nonaktif', 'city', false);
+        $this->createCategory('Kategori Aktif', 'kategori-aktif');
+        $this->createCategory('Kategori Nonaktif', 'kategori-nonaktif', false);
+
+        $this->get('/arsip-budaya')
+            ->assertOk()
+            ->assertSee('Provinsi Aktif')
+            ->assertDontSee('Kota Nonaktif')
+            ->assertSee('Kategori Aktif')
+            ->assertDontSee('Kategori Nonaktif');
+    }
+
+    public function test_archive_filter_validation_rejects_inactive_or_non_province_options(): void
+    {
+        $cityId = $this->createRegion('Kota Bandung', 'kota-bandung', 'city');
+        $inactiveRegionId = $this->createRegion('Provinsi Nonaktif', 'provinsi-nonaktif', 'province', false);
+        $inactiveCategoryId = $this->createCategory('Kategori Nonaktif', 'kategori-nonaktif', false);
+
+        $this->get("/arsip-budaya?region_id={$cityId}")
+            ->assertSessionHasErrors('region_id');
+        $this->get("/arsip-budaya?region_id={$inactiveRegionId}")
+            ->assertSessionHasErrors('region_id');
+        $this->get("/arsip-budaya?category_id={$inactiveCategoryId}")
+            ->assertSessionHasErrors('category_id');
+    }
+
+    public function test_cultural_detail_shows_public_entry_granted_media_sources_and_related_entries(): void
+    {
+        $regionId = $this->createRegion('Jawa Tengah', 'jawa-tengah');
+        $otherRegionId = $this->createRegion('Bali', 'bali');
+        $categoryId = $this->createCategory('Seni Pertunjukan', 'seni-pertunjukan');
+        $otherCategoryId = $this->createCategory('Kerajinan', 'kerajinan');
+        $entryId = $this->createEntry('Wayang Kulit');
+
+        DB::table('cultural_entries')->where('id', $entryId)->update([
+            'local_name' => 'Wayang kulit Jawa',
+            'short_description' => 'Pertunjukan bayangan tradisional.',
+            'description' => 'Wayang kulit menyampaikan kisah melalui pertunjukan boneka bayangan.',
+            'history' => 'Tradisi yang diwariskan lintas generasi.',
+            'meaning_and_function' => 'Sarana hiburan dan penyampaian nilai.',
+            'techniques' => 'Kulit dipahat dan dimainkan di balik kelir.',
+            'materials' => 'Kulit dan kayu.',
+            'community_context' => 'Hidup dalam ruang budaya masyarakat.',
+            'keywords' => json_encode(['wayang', 'pertunjukan']),
+            'origin_region_id' => $regionId,
+        ]);
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $entryId,
+            'category_id' => $categoryId,
+        ]);
+
+        DB::table('media')->insert([
+            [
+                'cultural_entry_id' => $entryId,
+                'media_type' => 'image',
+                'external_url' => 'https://example.test/wayang.jpg',
+                'caption' => 'Pertunjukan wayang',
+                'alt_text' => 'Wayang kulit di balik kelir',
+                'creator' => 'Dokumentator Budaya',
+                'copyright_holder' => 'Komunitas Wayang',
+                'license' => 'CC BY 4.0',
+                'permission_status' => 'granted',
+                'is_cover' => true,
+                'sort_order' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'cultural_entry_id' => $entryId,
+                'media_type' => 'image',
+                'external_url' => 'https://example.test/private.jpg',
+                'caption' => 'PRIVATE_PENDING_MEDIA',
+                'permission_status' => 'pending',
+                'is_cover' => false,
+                'sort_order' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $sourceId = DB::table('sources')->insertGetId([
+            'source_type' => 'book',
+            'title' => 'Ensiklopedia Wayang Nusantara',
+            'author' => 'Penulis Budaya',
+            'publisher' => 'Penerbit Nusantara',
+            'publication_year' => 2020,
+            'url' => 'https://example.test/rujukan',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('cultural_entry_source')->insert([
+            'cultural_entry_id' => $entryId,
+            'source_id' => $sourceId,
+        ]);
+
+        $categoryRelatedId = $this->createEntry('Wayang Bali');
+        DB::table('cultural_entries')->where('id', $categoryRelatedId)->update(['origin_region_id' => $otherRegionId]);
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $categoryRelatedId,
+            'category_id' => $categoryId,
+        ]);
+
+        $regionRelatedId = $this->createEntry('Tradisi Jawa Tengah');
+        DB::table('cultural_entries')->where('id', $regionRelatedId)->update(['origin_region_id' => $regionId]);
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $regionRelatedId,
+            'category_id' => $otherCategoryId,
+        ]);
+
+        $unrelatedId = $this->createEntry('Arsip Tidak Terkait');
+        DB::table('cultural_entries')->where('id', $unrelatedId)->update(['origin_region_id' => $otherRegionId]);
+
+        $draftRelatedId = $this->createEntry('Draft Terkait', 'draft', 'verified');
+        DB::table('category_cultural_entry')->insert([
+            'cultural_entry_id' => $draftRelatedId,
+            'category_id' => $categoryId,
+        ]);
+
+        $response = $this->get('/arsip-budaya/wayang-kulit');
+
+        $response
+            ->assertOk()
+            ->assertSee('Wayang kulit Jawa')
+            ->assertSee('Jawa Tengah')
+            ->assertSee('Seni Pertunjukan')
+            ->assertSee('Pertunjukan bayangan tradisional.')
+            ->assertSee('Tradisi yang diwariskan lintas generasi.')
+            ->assertSee('Dokumentator Budaya')
+            ->assertSee('Komunitas Wayang')
+            ->assertSee('CC BY 4.0')
+            ->assertSee('Ensiklopedia Wayang Nusantara')
+            ->assertSee(route('cultural-entries.index'))
+            ->assertSee(route('cultural-entries.show', 'wayang-bali'))
+            ->assertSee(route('cultural-entries.show', 'tradisi-jawa-tengah'))
+            ->assertDontSee('PRIVATE_PENDING_MEDIA')
+            ->assertDontSee('Arsip Tidak Terkait')
+            ->assertDontSee('Draft Terkait');
+
+        $entry = $response->viewData('entry');
+        $this->assertSame(
+            ['granted'],
+            $entry->media->pluck('permission_status')->all()
+        );
+        $this->assertCount(2, $response->viewData('relatedEntries'));
+    }
+
+    public function test_cultural_detail_requires_publication_approval_but_not_verification(): void
+    {
+        $this->createEntry('Detail Draft', 'draft', 'verified');
+        $this->createEntry('Detail Belum Terverifikasi', 'published', 'pending');
+        $deletedId = $this->createEntry('Detail Terhapus');
+        DB::table('cultural_entries')->where('id', $deletedId)->update(['deleted_at' => now()]);
+
+        $this->get('/arsip-budaya/detail-draft')->assertNotFound();
+        $this->get('/arsip-budaya/detail-belum-terverifikasi')
+            ->assertOk()
+            ->assertSee('Detail Belum Terverifikasi');
+        $this->get('/arsip-budaya/detail-terhapus')->assertNotFound();
+        $this->get('/arsip-budaya/tidak-ada')->assertNotFound();
+    }
+
+    public function test_archive_and_detail_use_clearly_labeled_editorial_art_for_honai_without_photos(): void
+    {
+        $honaiId = $this->createEntry('Rumah Honai');
+        DB::table('cultural_entries')->where('id', $honaiId)->update(['slug' => 'rumah-honai']);
+
+        $this->get('/arsip-budaya')
+            ->assertOk()
+            ->assertSee('images/cultural/editorial/rumah-honai.svg')
+            ->assertSee('Ilustrasi editorial · bukan foto dokumentasi');
+
+        $this->get('/arsip-budaya/rumah-honai')
+            ->assertOk()
+            ->assertSee('images/cultural/editorial/rumah-honai.svg')
+            ->assertSee('bukan foto dokumentasi autentik');
     }
 
     public function test_archive_search_requires_a_string_of_at_most_100_characters(): void
@@ -281,11 +543,18 @@ class PublicCulturalEntriesTest extends TestCase
         ]);
     }
 
-    private function createMedia(int $entryId, string $permissionStatus, string $mediaType = 'image'): void
+    private function createMedia(
+        int $entryId,
+        string $permissionStatus,
+        ?string $filePath = null,
+        ?string $externalUrl = null
+    ): void
     {
         DB::table('media')->insert([
             'cultural_entry_id' => $entryId,
-            'media_type' => $mediaType,
+            'media_type' => 'image',
+            'file_path' => $filePath,
+            'external_url' => $externalUrl,
             'permission_status' => $permissionStatus,
             'created_at' => now(),
             'updated_at' => now(),
@@ -302,6 +571,17 @@ class PublicCulturalEntriesTest extends TestCase
             'name' => $name,
             'slug' => $slug,
             'region_type' => $type,
+            'is_active' => $active,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function createCategory(string $name, string $slug, bool $active = true): int
+    {
+        return DB::table('categories')->insertGetId([
+            'name' => $name,
+            'slug' => $slug,
             'is_active' => $active,
             'created_at' => now(),
             'updated_at' => now(),
@@ -400,7 +680,6 @@ class PublicCulturalEntriesTest extends TestCase
         Schema::create('cultural_entry_source', function (Blueprint $table): void {
             $table->unsignedBigInteger('cultural_entry_id');
             $table->unsignedBigInteger('source_id');
-            $table->text('reference_note')->nullable();
             $table->primary(['cultural_entry_id', 'source_id']);
         });
     }

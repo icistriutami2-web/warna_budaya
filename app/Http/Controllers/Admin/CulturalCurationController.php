@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -73,9 +74,41 @@ class CulturalCurationController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        $pendingMedia = Media::query()
+            ->where('permission_status', self::PERMISSION_PENDING)
+            ->with([
+                'culturalEntry' => fn ($query) => $query->withTrashed()->with('sources'),
+            ])
+            ->orderBy('cultural_entry_id')
+            ->orderBy('id')
+            ->get();
+
+        $pendingMedia->each(function (Media $media): void {
+            $entryIsAvailable = $media->culturalEntry && ! $media->culturalEntry->trashed();
+            $hasPreviewFile = is_string($media->file_path)
+                && preg_match('/\Acultural\/[A-Za-z0-9][A-Za-z0-9._-]*\.jpg\z/i', $media->file_path)
+                && Storage::disk('local')->exists($media->file_path);
+            $media->setAttribute(
+                'preview_url',
+                $entryIsAvailable
+                    && $media->media_type === 'image'
+                    && $hasPreviewFile
+                    ? route('admin.curation.media.preview', [
+                        'entry' => $media->cultural_entry_id,
+                        'media' => $media->id,
+                    ])
+                    : null
+            );
+            $media->setAttribute('source_url', $this->safeExternalUrl($media->external_url));
+            $media->setAttribute('license_url', $media->licenseUrl());
+            $media->setAttribute('bulk_grant_blocker', $this->bulkGrantBlocker($media));
+        });
+
         return view('admin.curation.index', [
             'entries' => $entries,
             'stats' => $stats,
+            'pendingMedia' => $pendingMedia,
+            'bulkGrantableMediaCount' => $pendingMedia->whereNull('bulk_grant_blocker')->count(),
             'regions' => Region::query()->orderBy('name')->get(),
             'categories' => Category::query()->orderBy('name')->get(),
             'filters' => $filters,
@@ -96,10 +129,17 @@ class CulturalCurationController extends Controller
             ])
             ->findOrFail($entry);
 
-        $culturalEntry->media->each(function (Media $media): void {
+        $culturalEntry->media->each(function (Media $media) use ($culturalEntry): void {
+            $previewUrl = $media->file_path && str_starts_with($media->file_path, 'cultural/')
+                ? route('admin.curation.media.preview', [
+                    'entry' => $culturalEntry->id,
+                    'media' => $media->id,
+                ])
+                : ($media->file_path ? asset($media->file_path) : $this->safeExternalUrl($media->external_url));
+
             $media->setAttribute(
                 'preview_url',
-                $media->file_path ? asset($media->file_path) : $this->safeExternalUrl($media->external_url)
+                $previewUrl
             );
         });
         $culturalEntry->sources->each(fn ($source) => $source->setAttribute('safe_url', $this->safeExternalUrl($source->url)));
@@ -150,7 +190,7 @@ class CulturalCurationController extends Controller
             ->route('admin.curation.entries.show', $entry)
             ->with('status', $data['decision'] === 'approve'
                 ? 'Entri ditandai terverifikasi. Status publikasi tidak berubah.'
-                : 'Penolakan verifikasi dan alasannya telah dicatat. Entri tetap menunggu perbaikan.');
+                : 'Penolakan verifikasi dan alasannya telah dicatat. Keputusan publikasi tetap terpisah.');
     }
 
     public function reviewMedia(Request $request, int $entry, int $media): RedirectResponse
@@ -210,17 +250,110 @@ class CulturalCurationController extends Controller
             });
     }
 
+    public function grantPendingMedia(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'return_to' => ['nullable', 'in:media-sources'],
+        ]);
+
+        $result = DB::transaction(function (): array {
+            $pendingMedia = Media::query()
+                ->where('permission_status', self::PERMISSION_PENDING)
+                ->with([
+                    'culturalEntry' => fn ($query) => $query->withTrashed(),
+                ])
+                ->orderBy('cultural_entry_id')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $grantedCount = 0;
+            $skippedMedia = [];
+            $reviewedAt = now();
+            $note = 'Persetujuan izin media massal setelah pemeriksaan sumber dan lisensi pada Dashboard Kurasi.';
+
+            foreach ($pendingMedia as $media) {
+                $entry = CulturalEntry::withTrashed()
+                    ->lockForUpdate()
+                    ->find($media->cultural_entry_id);
+
+                if (! $entry || $entry->trashed()) {
+                    $skippedMedia[] = [
+                        'title' => $media->caption ?: 'Media #'.$media->id,
+                        'reason' => 'Entri budaya sudah tidak tersedia atau telah dihapus.',
+                    ];
+                    continue;
+                }
+
+                $blocker = $this->bulkGrantBlocker($media);
+                if ($blocker !== null) {
+                    $skippedMedia[] = [
+                        'title' => $media->caption ?: 'Media #'.$media->id,
+                        'reason' => $blocker,
+                    ];
+                    continue;
+                }
+
+                $media->forceFill([
+                    'permission_status' => self::PERMISSION_GRANTED,
+                    'permission_notes' => $this->appendMediaNote($media->permission_notes, $note),
+                ])->save();
+
+                $this->recordHistory(
+                    $entry,
+                    'media_granted',
+                    $reviewedAt,
+                    sprintf(
+                        'Persetujuan izin media massal: Media #%d (%s), pending → granted. %s',
+                        $media->id,
+                        $media->caption ?: $media->file_path,
+                        $note
+                    )
+                );
+
+                $grantedCount++;
+            }
+
+            return [
+                'granted' => $grantedCount,
+                'skipped' => $skippedMedia,
+            ];
+        });
+
+        $redirect = redirect()
+            ->route(($data['return_to'] ?? null) === 'media-sources'
+                ? 'admin.media-sources.page'
+                : 'admin.home')
+            ->with('status', sprintf(
+                '%d media pending disetujui; %d media dilewati karena belum memenuhi syarat.',
+                $result['granted'],
+                count($result['skipped'])
+            ))
+            ->with('media_bulk_skipped', $result['skipped'])
+            ->with('media_bulk_granted_count', $result['granted']);
+
+        return $redirect;
+    }
+
     public function publish(Request $request, int $entry): RedirectResponse
     {
         $data = $request->validate([
             'action' => ['required', 'in:publish,draft'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'return_to' => ['nullable', 'in:manage'],
         ]);
 
         $culturalEntry = CulturalEntry::withTrashed()->findOrFail($entry);
         $blockers = $data['action'] === 'publish' ? $this->publicationBlockers($culturalEntry) : [];
 
         if ($blockers !== []) {
+            if (($data['return_to'] ?? null) === 'manage') {
+                return redirect()
+                    ->route('admin.curation.entries.show', $entry)
+                    ->with('publication_blockers', $blockers)
+                    ->withErrors(['publication' => 'Entri belum dapat dipublikasikan. Periksa syarat yang tercantum.']);
+            }
+
             return back()
                 ->withInput()
                 ->with('publication_blockers', $blockers)
@@ -246,15 +379,13 @@ class CulturalCurationController extends Controller
                 : self::PUBLICATION_DRAFT;
             $changedAt = now();
 
-            if ($previousStatus === $nextStatus) {
-                return;
+            if ($previousStatus !== $nextStatus) {
+                $culturalEntry->forceFill([
+                    'publication_status' => $nextStatus,
+                    'published_at' => $nextStatus === self::PUBLICATION_PUBLISHED ? $changedAt : null,
+                    'updated_by' => $this->reviewerId(),
+                ])->save();
             }
-
-            $culturalEntry->forceFill([
-                'publication_status' => $nextStatus,
-                'published_at' => $nextStatus === self::PUBLICATION_PUBLISHED ? $changedAt : null,
-                'updated_by' => $this->reviewerId(),
-            ])->save();
 
             $decision = $nextStatus === self::PUBLICATION_PUBLISHED ? 'published' : 'withdrawn';
             $this->recordHistory(
@@ -262,7 +393,7 @@ class CulturalCurationController extends Controller
                 $decision,
                 $changedAt,
                 sprintf(
-                    'Publikasi: %s → %s.%s',
+                    'Persetujuan publikasi: %s → %s.%s',
                     $previousStatus,
                     $nextStatus,
                     $this->noteSuffix($data['notes'] ?? null)
@@ -271,10 +402,74 @@ class CulturalCurationController extends Controller
         });
 
         return redirect()
-            ->route('admin.curation.entries.show', $entry)
+            ->route(($data['return_to'] ?? null) === 'manage'
+                ? 'admin.cultural-entries.manage'
+                : 'admin.curation.entries.show', ($data['return_to'] ?? null) === 'manage' ? [] : $entry)
             ->with('status', $data['action'] === 'publish'
                 ? 'Entri berhasil dipublikasikan.'
                 : 'Entri ditarik dari publikasi dan disimpan sebagai draft.');
+    }
+
+    public function publishEligible(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'confirm_bulk_publish' => ['required', 'accepted'],
+        ]);
+
+        $result = DB::transaction(function (): array {
+            $entries = CulturalEntry::query()
+                ->where('publication_status', self::PUBLICATION_DRAFT)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+
+            $publishedCount = 0;
+            $skippedEntries = [];
+
+            foreach ($entries as $entry) {
+                $blockers = $this->publicationBlockers($entry);
+                if ($blockers !== []) {
+                    $skippedEntries[] = [
+                        'title' => $entry->title,
+                        'reasons' => $blockers,
+                    ];
+                    continue;
+                }
+
+                $publishedAt = now();
+                $entry->forceFill([
+                    'publication_status' => self::PUBLICATION_PUBLISHED,
+                    'published_at' => $publishedAt,
+                    'updated_by' => $this->reviewerId(),
+                ])->save();
+
+                $this->recordHistory(
+                    $entry,
+                    'published',
+                    $publishedAt,
+                    'Persetujuan publikasi massal: draft → published.'
+                );
+
+                $publishedCount++;
+            }
+
+            return [
+                'published' => $publishedCount,
+                'skipped' => $skippedEntries,
+            ];
+        });
+
+        $skippedCount = count($result['skipped']);
+        $status = sprintf(
+            '%d entri berhasil dipublikasikan; %d entri dilewati karena syarat publikasi belum terpenuhi.',
+            $result['published'],
+            $skippedCount
+        );
+
+        return redirect()
+            ->route('admin.cultural-entries.manage')
+            ->with('status', $status)
+            ->with('publication_bulk_skipped', $result['skipped']);
     }
 
     private function publicationBlockers(CulturalEntry $entry): array
@@ -283,10 +478,6 @@ class CulturalCurationController extends Controller
 
         if ($entry->trashed()) {
             $blockers[] = 'Entri telah dihapus secara lunak dan tidak dapat dipublikasikan.';
-        }
-
-        if ($entry->verification_status !== self::VERIFICATION_VERIFIED) {
-            $blockers[] = 'Entri harus berstatus verified.';
         }
 
         if (trim((string) $entry->title) === '') {
@@ -350,5 +541,46 @@ class CulturalCurationController extends Controller
         return in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true)
             ? $url
             : null;
+    }
+
+    private function bulkGrantBlocker(Media $media): ?string
+    {
+        if (! $media->culturalEntry || $media->culturalEntry->trashed()) {
+            return 'Entri budaya tidak tersedia atau telah dihapus.';
+        }
+
+        if ($media->media_type !== 'image') {
+            return 'Hanya media gambar yang dapat disetujui melalui tindakan massal.';
+        }
+
+        if (
+            ! is_string($media->file_path)
+            || ! preg_match('/\Acultural\/[A-Za-z0-9][A-Za-z0-9._-]*\.jpg\z/i', $media->file_path)
+            || ! Storage::disk('local')->exists($media->file_path)
+        ) {
+            return 'File gambar lokal tidak tersedia atau jalurnya tidak valid.';
+        }
+
+        if ($this->safeExternalUrl($media->external_url) === null) {
+            return 'URL halaman sumber yang valid belum dicantumkan.';
+        }
+
+        if (! is_string($media->creator) || trim($media->creator) === '') {
+            return 'Nama pencipta/fotografer belum dicantumkan.';
+        }
+
+        if ($media->licenseUrl() === null) {
+            return 'Lisensi terbuka yang dikenali belum dicantumkan.';
+        }
+
+        if (! is_string($media->caption) || trim($media->caption) === '') {
+            return 'Caption/konteks foto belum dicantumkan.';
+        }
+
+        if (! is_string($media->alt_text) || trim($media->alt_text) === '') {
+            return 'Alt text belum dicantumkan.';
+        }
+
+        return null;
     }
 }

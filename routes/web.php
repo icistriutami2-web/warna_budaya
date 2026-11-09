@@ -1,4 +1,3 @@
-
 <?php
 
 use App\Http\Controllers\Admin\AdminAuthController;
@@ -9,18 +8,40 @@ use App\Http\Controllers\Admin\CulturalEntryManagementController;
 use App\Http\Controllers\Admin\MediaSourceManagementController;
 use App\Http\Controllers\Admin\RegionManagementController;
 use App\Http\Controllers\Admin\UserManagementController;
+use App\Http\Controllers\AiChatController;
 use App\Http\Controllers\CulturalEntryController;
+use App\Http\Controllers\CulturalMapController;
+use App\Http\Controllers\CulturalMediaController;
+use App\Http\Controllers\DestinationController;
+use App\Http\Controllers\DigitalBookController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\RegionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::view('/tentang-kami', 'about')->name('about');
+Route::get('/cerita-nusantara', [DigitalBookController::class, 'index'])
+    ->name('digital-books.index');
+Route::get('/peta-budaya', CulturalMapController::class)
+    ->name('cultural-map.index');
+Route::get('/cerita-nusantara/{slug}', [DigitalBookController::class, 'show'])
+    ->name('digital-books.show');
 Route::get('/jelajah-nusantara', [RegionController::class, 'index'])
     ->name('regions.index');
 Route::get('/jelajah-nusantara/{slug}', [RegionController::class, 'show'])
     ->name('regions.show');
+Route::get('/wisata/{slug}', [DestinationController::class, 'show'])
+    ->name('destinations.show');
 Route::get('/arsip-budaya', [CulturalEntryController::class, 'index'])
     ->name('cultural-entries.index');
+Route::get('/arsip-budaya/{slug}', [CulturalEntryController::class, 'show'])
+    ->name('cultural-entries.show');
+Route::get('/cultural-media/{media}', [CulturalMediaController::class, 'show'])
+    ->whereNumber('media')
+    ->name('cultural-media.show');
+Route::post('/ai-sahabat-budaya/chat', AiChatController::class)
+    ->middleware('throttle:10,1')
+    ->name('ai.chat');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/login', [AdminAuthController::class, 'create'])
@@ -48,8 +69,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
             ->name('home');
         Route::view('/media-sources/manage', 'admin.media-sources.index')
             ->name('media-sources.page');
+        Route::post('/cultural-entries/publication/bulk', [CulturalCurationController::class, 'publishEligible'])
+            ->middleware('can:manage-cultural-content')
+            ->name('curation.entries.publication.bulk');
         Route::get('/cultural-entries/{entry}', [CulturalCurationController::class, 'show'])
             ->name('curation.entries.show');
+        Route::get('/cultural-entries/{entry}/media/{media}/preview', [CulturalMediaController::class, 'preview'])
+            ->whereNumber(['entry', 'media'])
+            ->middleware('can:manage-media')
+            ->name('curation.media.preview');
+        Route::post('/cultural-media/permission/bulk', [CulturalCurationController::class, 'grantPendingMedia'])
+            ->middleware('can:manage-media')
+            ->name('curation.media.permission.bulk');
         Route::post('/cultural-entries/{entry}/verification', [CulturalCurationController::class, 'verify'])
             ->middleware('can:verify-content')
             ->name('curation.entries.verification');
@@ -138,7 +169,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         ->controller(UserManagementController::class)
         ->group(function () {
             Route::get('/', 'index')->name('index');
-            Route::post('/', 'store')->name('store');
             Route::get('/{user}', 'show')->whereNumber('user')->name('show');
             Route::put('/{user}', 'update')->whereNumber('user')->name('update');
             Route::patch('/{user}/status', 'setStatus')->whereNumber('user')->name('status');

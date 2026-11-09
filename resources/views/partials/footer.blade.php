@@ -2,10 +2,10 @@
     <div class="page-shell footer-main">
         <div class="footer-brand">
             <a class="brand brand-light" href="{{ route('home') }}">
-                <span class="brand-mark" aria-hidden="true">W</span>
+                <img class="brand-mark" src="{{ asset('images/brand-emblem.svg') }}" alt="">
                 <span class="brand-copy">
                     <span class="brand-name">WARNA BUDAYA</span>
-                    <span class="brand-tagline">Kenali · Jelajahi · Lestarikan</span>
+                    <span class="brand-tagline">Jaga Budaya, Lestarikan Negeri</span>
                 </span>
             </a>
             <p>Ruang digital untuk mengenal, merayakan, dan menjaga kekayaan budaya Indonesia.</p>
@@ -13,13 +13,15 @@
         <div class="footer-column">
             <h2>Jelajahi</h2>
             <a href="{{ route('regions.index') }}">Jelajah Nusantara</a>
+            <a href="{{ route('cultural-map.index') }}">Peta Interaktif Nusantara</a>
             <a href="{{ route('home') }}#kategori">Kategori budaya</a>
             <a href="{{ route('cultural-entries.index') }}">Arsip budaya</a>
+            <a href="{{ route('digital-books.index') }}">Buku digital</a>
         </div>
         <div class="footer-column">
             <h2>Tentang platform</h2>
-            <a href="{{ route('home') }}#tentang">Misi kami</a>
-            <a href="{{ route('home') }}#cerita">Cerita Nusantara</a>
+            <a href="{{ route('about') }}#visi-misi">Visi dan misi kami</a>
+            <a href="{{ route('digital-books.index') }}">Cerita Nusantara</a>
             <span class="footer-note">Berangkat dari pengetahuan dan sumber yang dapat ditelusuri.</span>
             @if (request()->routeIs('home'))
                 <a class="footer-superadmin-link" href="{{ route('admin.super-entry') }}" aria-label="Akses khusus Super Admin">

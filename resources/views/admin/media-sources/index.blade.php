@@ -31,8 +31,40 @@
             <h1>Media dan <em>Sumber.</em></h1>
             <p>Rawat dokumentasi visual dan rujukan pengetahuan yang menopang setiap kisah budaya.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>JEJAK<br>RUJUKAN</small></div>
+        <div class="media-sources-heading-actions">
+            @can('manage-media')
+                <form action="{{ route('admin.curation.media.permission.bulk') }}" method="POST" onsubmit="return confirm('Setujui semua media pending yang memenuhi syarat file, sumber, kreator, caption, alt text, dan lisensi? Artikel budaya tidak akan dipublikasikan oleh tindakan ini.');">
+                    @csrf
+                    <input type="hidden" name="return_to" value="media-sources">
+                    <button class="media-sources-button is-bulk-approve" type="submit">Setujui semua media yang layak</button>
+                </form>
+                <button class="media-sources-button is-heading-action" type="button" data-media-create><span aria-hidden="true">＋</span> Tambah media</button>
+            @endcan
+            @can('manage-sources')
+                <button class="media-sources-button is-heading-action" type="button" data-source-create><span aria-hidden="true">＋</span> Tambah sumber</button>
+            @endcan
+            <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
+        </div>
     </section>
+
+    @if (session()->has('status'))
+        <div class="admin-flash admin-flash-success" role="status" aria-live="polite">
+            <strong>{{ session('status') }}</strong>
+            @if (session()->has('media_bulk_granted_count'))
+                <p>{{ number_format(session('media_bulk_granted_count'), 0, ',', '.') }} media disetujui. Entri budaya tidak mengalami perubahan status publikasi maupun verifikasi.</p>
+            @endif
+            @if (count(session('media_bulk_skipped', [])) > 0)
+                <p>Media berikut dilewati:</p>
+                <ul>
+                    @foreach (session('media_bulk_skipped') as $skippedMedia)
+                        <li><strong>{{ $skippedMedia['title'] }}</strong> — {{ $skippedMedia['reason'] }}</li>
+                    @endforeach
+                </ul>
+            @elseif (session()->has('media_bulk_granted_count'))
+                <p>Tidak ada media yang dilewati.</p>
+            @endif
+        </div>
+    @endif
 
     <section class="media-sources-workspace" aria-label="Pengelolaan media dan sumber">
         <div class="media-sources-tabs" role="tablist" aria-label="Jenis referensi">
@@ -56,7 +88,6 @@
                         <h2>Daftar media <span data-media-total>—</span></h2>
                         <p>Status izin ditampilkan sebagai informasi dan hanya diubah melalui alur pemeriksaan izin.</p>
                     </div>
-                    <button class="media-sources-button is-primary" type="button" data-media-create><span aria-hidden="true">＋</span> Tambah media</button>
                 </div>
                 <form class="media-sources-filters" data-media-filter-form>
                     <label class="media-sources-search"><span class="admin-sr-only">Cari media atau entri budaya</span><span aria-hidden="true">⌕</span><input type="search" name="search" maxlength="100" placeholder="Cari keterangan, pencipta, atau budaya..."></label>
@@ -84,7 +115,6 @@
                         <h2>Daftar sumber <span data-source-total>—</span></h2>
                         <p>Kelola rujukan dan keterhubungannya dengan entri budaya.</p>
                     </div>
-                    <button class="media-sources-button is-primary" type="button" data-source-create><span aria-hidden="true">＋</span> Tambah sumber</button>
                 </div>
                 <form class="media-sources-filters" data-source-filter-form>
                     <label class="media-sources-search"><span class="admin-sr-only">Cari sumber</span><span aria-hidden="true">⌕</span><input type="search" name="search" maxlength="100" placeholder="Cari judul, penulis, penerbit, atau ID..."></label>

@@ -7,10 +7,8 @@
         class="ua-config"
         data-user-config
         data-index-url="{{ route('admin.api.users.index') }}"
-        data-store-url="{{ route('admin.api.users.store') }}"
         data-show-template="{{ route('admin.api.users.show', ['user' => '__id__']) }}"
         data-update-template="{{ route('admin.api.users.update', ['user' => '__id__']) }}"
-        data-status-template="{{ route('admin.api.users.status', ['user' => '__id__']) }}"
         data-password-template="{{ route('admin.api.users.password', ['user' => '__id__']) }}"
         data-csrf-token="{{ csrf_token() }}"
     ></div>
@@ -19,9 +17,9 @@
         <div>
             <p class="admin-eyebrow"><span></span> Akses khusus Super Admin</p>
             <h1>Manajemen <em>Pengguna.</em></h1>
-            <p>Kelola akun pengelola dan kewenangannya. Akun Super Admin dilindungi dari perubahan role dan penonaktifan melalui halaman ini.</p>
+            <p>Kelola informasi dua akun Super Admin yang sudah terdaftar. Halaman ini tidak menyediakan pembuatan akun, perubahan role, atau penonaktifan.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>AKSES<br>PENGELOLA</small></div>
+        <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
     </section>
 
     <section class="ua-panel" aria-labelledby="ua-list-title">
@@ -31,22 +29,12 @@
                 <h2 id="ua-list-title">Akun pengelola <span class="ua-total" data-users-total>—</span></h2>
                 <p>Data akun dimuat langsung dari layanan pengelolaan.</p>
             </div>
-            <button type="button" class="ua-button ua-button-primary" data-user-create>＋ Tambah akun</button>
         </div>
 
         <form class="ua-filters" data-user-filter-form>
             <label class="ua-search">
                 <span class="admin-sr-only">Cari nama atau email</span>
                 <input type="search" name="search" maxlength="100" placeholder="Cari nama atau email…">
-            </label>
-            <label>
-                <span class="admin-sr-only">Filter role</span>
-                <select name="role">
-                    <option value="">Semua role</option>
-                    <option value="super_admin">Super Admin</option>
-                    <option value="admin">Admin</option>
-                    <option value="verifikator">Verifikator</option>
-                </select>
             </label>
             <label>
                 <span class="admin-sr-only">Filter status</span>
@@ -79,21 +67,15 @@
     <dialog class="ua-dialog" data-user-dialog>
         <form data-user-form>
             <div class="ua-dialog-heading">
-                <div><p class="admin-eyebrow"><span></span> Akun pengelola</p><h2 data-user-form-title>Tambah akun</h2></div>
+                <div><p class="admin-eyebrow"><span></span> Akun pengelola</p><h2>Edit akun</h2></div>
                 <button type="button" class="ua-close" data-user-close aria-label="Tutup">×</button>
             </div>
             <div class="ua-form-grid">
                 <label>Nama<input name="name" maxlength="255" required autocomplete="name"></label>
                 <label>Email<input name="email" type="email" maxlength="255" required autocomplete="email"></label>
-                <label>Role<select name="role" required><option value="admin">Admin</option><option value="verifikator">Verifikator</option></select></label>
-                <div class="ua-password-fields" data-user-password-fields>
-                    <label>Password<input name="password" type="password" minlength="12" autocomplete="new-password"></label>
-                    <label>Konfirmasi password<input name="password_confirmation" type="password" minlength="12" autocomplete="new-password"></label>
-                    <small>Password minimal 12 karakter.</small>
-                </div>
             </div>
             <div class="ua-form-error" data-user-form-error role="alert" hidden></div>
-            <div class="ua-dialog-actions"><button type="button" class="ua-button ua-button-secondary" data-user-close>Batal</button><button type="submit" class="ua-button ua-button-primary" data-user-submit>Simpan akun</button></div>
+            <div class="ua-dialog-actions"><button type="button" class="ua-button ua-button-secondary" data-user-close>Batal</button><button type="submit" class="ua-button ua-button-primary" data-user-submit>Simpan perubahan</button></div>
         </form>
     </dialog>
 

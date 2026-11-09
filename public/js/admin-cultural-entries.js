@@ -39,6 +39,12 @@ document.addEventListener('DOMContentLoaded', () => {
         feedback.classList.remove('is-error', 'is-success');
     };
 
+    document.querySelector('[data-bulk-publication-form]')?.addEventListener('submit', (event) => {
+        if (!window.confirm('Publikasikan semua entri aktif yang memenuhi syarat sekarang? Entri yang belum memenuhi syarat akan dilewati.')) {
+            event.preventDefault();
+        }
+    });
+
     const readJson = async (response) => {
         const contentType = response.headers.get('content-type') ?? '';
         if (!contentType.includes('application/json')) {
@@ -133,6 +139,45 @@ document.addEventListener('DOMContentLoaded', () => {
         return button;
     };
 
+    const createPublicationForm = (entry) => {
+        const form = document.createElement('form');
+        form.className = 'cultural-entry-publication-form';
+        form.method = 'POST';
+        form.action = safeApiUrl(config.dataset.publicationTemplate.replace('__id__', encodeURIComponent(entry.id))).href;
+
+        const token = document.createElement('input');
+        token.type = 'hidden';
+        token.name = '_token';
+        token.value = config.dataset.csrfToken ?? '';
+
+        const action = document.createElement('input');
+        action.type = 'hidden';
+        action.name = 'action';
+        action.value = entry.publication_status === 'published' ? 'draft' : 'publish';
+
+        const returnTo = document.createElement('input');
+        returnTo.type = 'hidden';
+        returnTo.name = 'return_to';
+        returnTo.value = 'manage';
+
+        const button = document.createElement('button');
+        button.type = 'submit';
+        button.className = `cultural-entry-action ${entry.publication_status === 'published' ? 'is-danger' : 'is-publish'}`;
+        button.textContent = entry.publication_status === 'published' ? 'Tarik publikasi' : 'Publikasikan';
+        button.addEventListener('click', (event) => {
+            const message = entry.publication_status === 'published'
+                ? `Tarik "${entry.title}" dari Arsip Budaya?`
+                : `Setujui publikasi "${entry.title}" sekarang?`;
+            if (!window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
+
+        form.append(token, action, returnTo, button);
+
+        return form;
+    };
+
     const renderEntry = (entry) => {
         const row = document.createElement('tr');
         if (entry.deleted_at) {
@@ -183,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
         actions.className = 'cultural-entry-row-actions';
         actions.append(createActionButton('Detail', 'detail', entry.id));
         if (!entry.deleted_at) {
+            actions.append(createPublicationForm(entry));
             actions.append(
                 createActionButton('Ubah', 'edit', entry.id),
                 createActionButton('Hapus', 'delete', entry.id, 'is-danger'),

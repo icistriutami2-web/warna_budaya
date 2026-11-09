@@ -6,6 +6,8 @@ use App\Models\Category;
 use App\Models\CulturalEntry;
 use App\Models\Media;
 use App\Models\Region;
+use App\Support\IndonesianDestinations;
+use App\Support\NusantaraDigitalBooks;
 
 class HomeController extends Controller
 {
@@ -114,6 +116,8 @@ class HomeController extends Controller
         return view('home', [
             'categories' => $categories,
             'featuredEntries' => $featuredEntries,
+            'books' => NusantaraDigitalBooks::all(),
+            'destinations' => IndonesianDestinations::all(),
             'provinceCount' => Region::query()
                 ->where('region_type', 'province')
                 ->where('is_active', true)

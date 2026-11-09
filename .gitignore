@@ -5,3 +5,5 @@
 /vendor/
 /node_modules/
 /storage/*.key
+/storage/app/private/
+/-files .env

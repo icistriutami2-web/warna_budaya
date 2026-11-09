@@ -10,6 +10,60 @@
     margin-bottom: 22px;
 }
 
+.media-sources-heading-actions {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: 0 1 660px;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.media-sources-heading-actions form {
+    margin: 0;
+}
+
+.media-sources-heading-actions .media-sources-button {
+    min-height: 40px;
+    padding: 0 13px;
+    border-color: rgba(226, 196, 127, .46);
+    background: rgba(255, 253, 246, .08);
+    color: #fffdf6;
+}
+
+.media-sources-heading-actions .media-sources-button:hover {
+    background: rgba(255, 253, 246, .16);
+}
+
+.media-sources-heading-actions .media-sources-button.is-bulk-approve {
+    border-color: var(--media-gold);
+    background: var(--media-gold);
+    color: #19382d;
+}
+
+.media-sources-heading-actions .media-sources-button.is-bulk-approve:hover {
+    background: #d7b36f;
+}
+
+.media-sources-heading-actions .admin-heading-stamp {
+    margin-left: 5px;
+}
+
+.admin-media-sources-page .admin-flash {
+    margin: 0 0 22px;
+}
+
+.admin-media-sources-page .admin-flash p {
+    margin: 8px 0 0;
+}
+
+.admin-media-sources-page .admin-flash ul {
+    display: grid;
+    gap: 5px;
+}
+
 .admin-media-sources-page .media-sources-workspace {
     overflow: hidden;
     border: 1px solid rgba(41, 40, 32, .1);
@@ -615,6 +669,25 @@ button.media-sources-page-link {
 }
 
 @media (max-width: 760px) {
+    .admin-media-sources-page .media-sources-heading {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 17px;
+        padding: 25px 22px;
+    }
+
+    .media-sources-heading-actions {
+        width: 100%;
+        flex: auto;
+        justify-content: flex-start;
+    }
+
+    .media-sources-heading-actions .admin-heading-stamp {
+        width: 52px;
+        height: 52px;
+        margin-left: auto;
+    }
+
     .media-sources-panel {
         padding: 17px;
     }

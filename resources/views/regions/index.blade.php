@@ -16,7 +16,7 @@
                 <button type="submit">Temukan</button>
             </form>
             <span class="region-intro-note"><span aria-hidden="true">✳</span> Kenali kekayaan budaya dari {{ $provinceCount }} provinsi</span>
-            <span class="region-intro-seal" aria-hidden="true">W<br><small>NUSANTARA</small></span>
+            <img class="region-intro-seal" src="{{ asset('images/brand-emblem.svg') }}" alt="">
         </div>
     </section>
 

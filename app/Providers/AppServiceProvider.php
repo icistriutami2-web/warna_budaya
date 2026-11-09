@@ -19,31 +19,13 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Gate::define('admin-access', fn (User $user): bool => $user->hasAnyRole(...User::ROLES));
-        Gate::define('manage-cultural-content', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_ADMIN
-        ));
-        Gate::define('manage-media', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_ADMIN
-        ));
-        Gate::define('manage-regions', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_ADMIN
-        ));
-        Gate::define('manage-categories', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_ADMIN
-        ));
-        Gate::define('manage-sources', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_ADMIN
-        ));
-        Gate::define('verify-content', fn (User $user): bool => $user->hasAnyRole(
-            User::ROLE_SUPER_ADMIN,
-            User::ROLE_VERIFIKATOR
-        ));
+        Gate::define('admin-access', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('manage-cultural-content', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('manage-media', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('manage-regions', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('manage-categories', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('manage-sources', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
+        Gate::define('verify-content', fn (User $user): bool => $user->hasRole(User::ROLE_SUPER_ADMIN));
         Gate::define('manage-admin-accounts', fn (User $user): bool => $user->hasRole(
             User::ROLE_SUPER_ADMIN
         ));

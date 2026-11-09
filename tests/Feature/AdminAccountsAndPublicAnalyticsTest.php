@@ -62,7 +62,7 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
         $this->getJson(route('admin.api.users.index'))->assertUnauthorized();
         $this->getJson(route('admin.api.analytics.summary'))->assertUnauthorized();
 
-        foreach ([User::ROLE_ADMIN, User::ROLE_VERIFIKATOR] as $role) {
+        foreach (['admin', 'verifikator'] as $role) {
             $this->actingAs($this->user($role))
                 ->getJson(route('admin.api.users.index'))
                 ->assertForbidden();
@@ -75,86 +75,58 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
         $this->getJson(route('admin.api.analytics.summary'))->assertOk();
     }
 
-    public function test_user_list_includes_both_super_admin_accounts_and_other_staff_roles(): void
+    public function test_user_list_includes_only_existing_super_admin_accounts(): void
     {
         $superAdminOne = $this->user(User::ROLE_SUPER_ADMIN);
         $superAdminTwo = $this->user(User::ROLE_SUPER_ADMIN);
-        $admin = $this->user(User::ROLE_ADMIN);
-        $verifikator = $this->user(User::ROLE_VERIFIKATOR);
 
         $response = $this->actingAs($superAdminOne)
             ->getJson(route('admin.api.users.index'))
             ->assertOk()
-            ->assertJsonPath('meta.total', 4);
+            ->assertJsonPath('meta.total', 2);
 
         $this->assertEqualsCanonicalizing(
-            [$superAdminOne->id, $superAdminTwo->id, $admin->id, $verifikator->id],
+            [$superAdminOne->id, $superAdminTwo->id],
             collect($response->json('data'))->pluck('id')->all()
-        );
-        $this->assertSame(
-            2,
-            collect($response->json('data'))
-                ->where('role', User::ROLE_SUPER_ADMIN)
-                ->count()
         );
     }
 
-    public function test_super_admin_can_manage_non_super_admin_accounts_without_role_escalation(): void
+    public function test_user_management_page_has_no_account_creation_or_legacy_role_choices(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $target = $this->user(User::ROLE_VERIFIKATOR);
 
-        $response = $this->actingAs($superAdmin)->postJson(route('admin.api.users.store'), [
-            'name' => 'Admin Baru',
-            'email' => 'ADMIN.BARU@example.test',
-            'role' => User::ROLE_ADMIN,
-            'password' => 'long-secure-password',
-            'password_confirmation' => 'long-secure-password',
-        ])->assertCreated()
-            ->assertJsonPath('data.role', User::ROLE_ADMIN)
-            ->assertJsonPath('data.email', 'admin.baru@example.test')
-            ->assertJsonMissingPath('data.password');
+        $this->actingAs($superAdmin)
+            ->get(route('admin.users.page'))
+            ->assertOk()
+            ->assertSee('Edit akun')
+            ->assertDontSee('Tambah akun')
+            ->assertDontSee('data-user-create', false)
+            ->assertDontSee('value="admin"', false)
+            ->assertDontSee('value="verifikator"', false);
+    }
 
-        $createdId = $response->json('data.id');
-        $this->assertTrue(Hash::check(
-            'long-secure-password',
-            DB::table('users')->where('id', $createdId)->value('password')
-        ));
+    public function test_account_creation_is_disabled_and_super_admin_role_cannot_be_changed(): void
+    {
+        $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
+        $this->user(User::ROLE_SUPER_ADMIN);
+        $before = DB::table('users')->count();
 
-        $this->postJson(route('admin.api.users.store'), [
-            'name' => 'Verifikator Baru',
-            'email' => 'verifikator.baru@example.test',
-            'role' => User::ROLE_VERIFIKATOR,
-            'password' => 'long-secure-password',
-            'password_confirmation' => 'long-secure-password',
-        ])->assertCreated()
-            ->assertJsonPath('data.role', User::ROLE_VERIFIKATOR);
-
-        $this->postJson(route('admin.api.users.store'), [
-            'name' => 'Promosi',
-            'email' => 'promosi@example.test',
-            'role' => User::ROLE_SUPER_ADMIN,
-            'password' => 'long-secure-password',
-            'password_confirmation' => 'long-secure-password',
-        ])->assertUnprocessable()
-            ->assertJsonValidationErrors(['role']);
+        foreach (['admin', 'verifikator', User::ROLE_SUPER_ADMIN] as $role) {
+            $this->actingAs($superAdmin)
+                ->postJson('/admin/api/users', [
+                    'name' => 'Akun Tidak Boleh Dibuat',
+                    'email' => 'tidak-boleh@example.test',
+                    'role' => $role,
+                    'password' => 'long-secure-password',
+                    'password_confirmation' => 'long-secure-password',
+                ])
+                ->assertStatus(405);
+        }
 
         $this->putJson(route('admin.api.users.update', $superAdmin->id), [
-            'role' => User::ROLE_ADMIN,
+            'role' => 'admin',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['role']);
-
-        $this->putJson(route('admin.api.users.update', $target->id), [
-            'name' => 'Verifikator menjadi Admin',
-            'role' => User::ROLE_ADMIN,
-        ])->assertOk()
-            ->assertJsonPath('data.role', User::ROLE_ADMIN);
-
-        $adminTarget = $this->user(User::ROLE_ADMIN);
-        $this->putJson(route('admin.api.users.update', $adminTarget->id), [
-            'role' => User::ROLE_VERIFIKATOR,
-        ])->assertOk()
-            ->assertJsonPath('data.role', User::ROLE_VERIFIKATOR);
 
         $this->putJson(route('admin.api.users.update', $superAdmin->id), [
             'name' => 'Super Admin Tetap',
@@ -167,66 +139,61 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
             User::ROLE_SUPER_ADMIN,
             DB::table('users')->where('id', $superAdmin->id)->value('role')
         );
+        $this->assertSame($before, DB::table('users')->count());
     }
 
-    public function test_admin_and_verifikator_can_be_loaded_and_updated_without_account_status_column(): void
+    public function test_only_super_admin_accounts_can_be_loaded_and_updated_without_account_status_column(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $this->user(User::ROLE_SUPER_ADMIN);
-        $admin = $this->user(User::ROLE_ADMIN);
-        $verifikator = $this->user(User::ROLE_VERIFIKATOR);
-        $adminPassword = $admin->password;
-        $verifikatorPassword = $verifikator->password;
+        $secondSuperAdmin = $this->user(User::ROLE_SUPER_ADMIN);
+        $legacyAccount = $this->user('admin');
+        $superAdminPassword = $superAdmin->password;
+        $secondPassword = $secondSuperAdmin->password;
 
         Schema::table('users', function (Blueprint $table): void {
             $table->dropColumn('is_active');
         });
 
         $this->actingAs($superAdmin)
-            ->getJson(route('admin.api.users.show', $admin->id))
+            ->getJson(route('admin.api.users.show', $secondSuperAdmin->id))
             ->assertOk()
-            ->assertJsonPath('data.id', $admin->id)
-            ->assertJsonPath('data.role', User::ROLE_ADMIN)
+            ->assertJsonPath('data.id', $secondSuperAdmin->id)
+            ->assertJsonPath('data.role', User::ROLE_SUPER_ADMIN)
             ->assertJsonPath('data.status', 'unavailable')
             ->assertJsonMissingPath('data.password');
 
-        $this->getJson(route('admin.api.users.show', $verifikator->id))
-            ->assertOk()
-            ->assertJsonPath('data.id', $verifikator->id)
-            ->assertJsonPath('data.role', User::ROLE_VERIFIKATOR);
+        $this->getJson(route('admin.api.users.show', $legacyAccount->id))
+            ->assertNotFound();
 
-        $this->putJson(route('admin.api.users.update', $admin->id), [
-            'name' => 'Admin Diperbarui',
-            'email' => 'admin.diperbarui@example.test',
+        $this->putJson(route('admin.api.users.update', $secondSuperAdmin->id), [
+            'name' => 'Super Admin Diperbarui',
+            'email' => 'super-admin.diperbarui@example.test',
         ])->assertOk()
-            ->assertJsonPath('data.name', 'Admin Diperbarui')
-            ->assertJsonPath('data.email', 'admin.diperbarui@example.test');
+            ->assertJsonPath('data.name', 'Super Admin Diperbarui')
+            ->assertJsonPath('data.email', 'super-admin.diperbarui@example.test');
 
-        $this->putJson(route('admin.api.users.update', $verifikator->id), [
-            'name' => 'Verifikator Diperbarui',
-            'email' => 'verifikator.diperbarui@example.test',
-            'role' => User::ROLE_ADMIN,
-        ])->assertOk()
-            ->assertJsonPath('data.name', 'Verifikator Diperbarui')
-            ->assertJsonPath('data.role', User::ROLE_ADMIN);
+        $this->putJson(route('admin.api.users.update', $secondSuperAdmin->id), [
+            'role' => 'verifikator',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['role']);
 
-        $this->putJson(route('admin.api.users.update', $admin->id), [
-            'email' => 'verifikator.diperbarui@example.test',
+        $this->putJson(route('admin.api.users.update', $superAdmin->id), [
+            'email' => 'super-admin.diperbarui@example.test',
         ])->assertUnprocessable()
             ->assertJsonValidationErrors(['email']);
 
-        $this->assertSame($adminPassword, DB::table('users')->where('id', $admin->id)->value('password'));
-        $this->assertSame($verifikatorPassword, DB::table('users')->where('id', $verifikator->id)->value('password'));
+        $this->assertSame($superAdminPassword, DB::table('users')->where('id', $superAdmin->id)->value('password'));
+        $this->assertSame($secondPassword, DB::table('users')->where('id', $secondSuperAdmin->id)->value('password'));
         $this->assertSame(2, DB::table('users')->where('role', User::ROLE_SUPER_ADMIN)->count());
     }
 
     public function test_super_admin_accounts_cannot_be_disabled_and_password_reset_is_private(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $admin = $this->user(User::ROLE_ADMIN);
+        $secondSuperAdmin = $this->user(User::ROLE_SUPER_ADMIN);
         DB::table('sessions')->insert([
-            'id' => 'admin-session',
-            'user_id' => $admin->id,
+            'id' => 'second-super-admin-session',
+            'user_id' => $secondSuperAdmin->id,
             'payload' => '',
             'last_activity' => now()->timestamp,
         ]);
@@ -237,12 +204,11 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
         $this->patchJson(route('admin.api.users.status', $superAdmin->id), ['is_active' => true])
             ->assertOk();
 
-        $this->patchJson(route('admin.api.users.status', $admin->id), ['is_active' => false])
-            ->assertOk()
-            ->assertJsonPath('data.status', 'inactive');
-        $this->assertDatabaseMissing('sessions', ['id' => 'admin-session']);
+        $this->patchJson(route('admin.api.users.status', $secondSuperAdmin->id), ['is_active' => false])
+            ->assertStatus(409);
+        $this->assertDatabaseHas('sessions', ['id' => 'second-super-admin-session']);
 
-        $this->putJson(route('admin.api.users.password', $admin->id), [
+        $this->putJson(route('admin.api.users.password', $secondSuperAdmin->id), [
             'password' => 'new-long-secure-password',
             'password_confirmation' => 'new-long-secure-password',
         ])->assertOk()
@@ -250,54 +216,45 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
             ->assertJsonMissingPath('data.password_hash');
         $this->assertTrue(Hash::check(
             'new-long-secure-password',
-            DB::table('users')->where('id', $admin->id)->value('password')
+            DB::table('users')->where('id', $secondSuperAdmin->id)->value('password')
         ));
     }
 
-    public function test_account_search_role_status_pagination_and_inactive_login_protection(): void
+    public function test_account_search_filters_by_login_status_and_paginates(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $activeAdmin = $this->user(User::ROLE_ADMIN);
-        $inactiveVerifier = $this->user(User::ROLE_VERIFIKATOR, false);
-        $this->databaseSession($activeAdmin);
+        $secondSuperAdmin = $this->user(User::ROLE_SUPER_ADMIN);
+        $this->databaseSession($secondSuperAdmin);
 
         $this->actingAs($superAdmin)
             ->getJson(route('admin.api.users.index', [
-                'search' => $activeAdmin->email,
-                'role' => User::ROLE_ADMIN,
+                'search' => $secondSuperAdmin->email,
                 'status' => 'active',
                 'per_page' => 1,
             ]))
             ->assertOk()
             ->assertJsonPath('meta.total', 1)
-            ->assertJsonPath('data.0.id', $activeAdmin->id)
+            ->assertJsonPath('data.0.id', $secondSuperAdmin->id)
             ->assertJsonPath('data.0.login_active', true)
             ->assertJsonPath('data.0.status', 'active');
 
-        $this->getJson(route('admin.api.users.show', $inactiveVerifier->id))
+        $this->getJson(route('admin.api.users.show', $superAdmin->id))
             ->assertOk()
-            ->assertJsonPath('data.status', 'inactive');
-
-        $this->post(route('admin.login.store'), [
-            'email' => $inactiveVerifier->email,
-            'password' => 'test-password-123',
-        ])->assertSessionHasErrors(['email']);
-        $this->assertGuest();
+            ->assertJsonPath('data.status', 'active');
     }
 
     public function test_user_list_includes_super_admins_and_marks_status_unavailable_without_status_column(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
         $secondSuperAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $this->user(User::ROLE_ADMIN);
-        $legacyRole = $this->user('legacy_role');
+        $legacyRole = $this->user('admin');
 
         config(['session.driver' => 'file']);
 
         $response = $this->actingAs($superAdmin)
             ->getJson(route('admin.api.users.index'))
             ->assertOk()
-            ->assertJsonPath('meta.total', 4)
+            ->assertJsonPath('meta.total', 2)
             ->assertJsonPath('meta.status_available', false)
             ->assertJsonPath('data.0.status', 'unavailable')
             ->assertJsonPath('data.0.login_active', null);
@@ -305,22 +262,20 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
         $listedIds = collect($response->json('data'))->pluck('id');
         $this->assertTrue($listedIds->contains($superAdmin->id));
         $this->assertTrue($listedIds->contains($secondSuperAdmin->id));
-        $this->assertTrue($listedIds->contains($legacyRole->id));
+        $this->assertFalse($listedIds->contains($legacyRole->id));
 
         $this->getJson(route('admin.api.users.index', ['status' => 'active']))
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['status']);
     }
 
-    public function test_login_status_uses_unexpired_database_sessions_for_every_role(): void
+    public function test_login_status_uses_unexpired_database_sessions_for_super_admin_accounts(): void
     {
         $superAdmin = $this->user(User::ROLE_SUPER_ADMIN);
         $secondSuperAdmin = $this->user(User::ROLE_SUPER_ADMIN);
-        $admin = $this->user(User::ROLE_ADMIN);
-        $verifikator = $this->user(User::ROLE_VERIFIKATOR);
 
-        $sessionId = $this->databaseSession($admin);
-        $this->databaseSession($admin, now()->subMinutes(config('session.lifetime') + 1));
+        $sessionId = $this->databaseSession($secondSuperAdmin);
+        $this->databaseSession($secondSuperAdmin, now()->subMinutes(config('session.lifetime') + 1));
 
         $response = $this->actingAs($superAdmin)
             ->getJson(route('admin.api.users.index'))
@@ -329,28 +284,26 @@ class AdminAccountsAndPublicAnalyticsTest extends TestCase
             ->assertDontSee($sessionId);
 
         $users = collect($response->json('data'))->keyBy('id');
-        $this->assertSame(4, $users->count());
+        $this->assertSame(2, $users->count());
         $this->assertFalse($users[$superAdmin->id]['login_active']);
         $this->assertSame('inactive', $users[$superAdmin->id]['status']);
         $this->assertFalse($users[$secondSuperAdmin->id]['login_active']);
         $this->assertSame('inactive', $users[$secondSuperAdmin->id]['status']);
-        $this->assertTrue($users[$admin->id]['login_active']);
-        $this->assertFalse($users[$verifikator->id]['login_active']);
 
         $this->getJson(route('admin.api.users.index', ['status' => 'active']))
             ->assertOk()
-            ->assertJsonPath('meta.total', 2);
+            ->assertJsonPath('meta.total', 0);
         $this->getJson(route('admin.api.users.index', ['status' => 'inactive']))
             ->assertOk()
             ->assertJsonPath('meta.total', 2);
 
         DB::table('sessions')->where('id', $sessionId)->delete();
         $afterLogout = $this->getJson(route('admin.api.users.index'))->assertOk();
-        $this->assertFalse(collect($afterLogout->json('data'))->keyBy('id')[$admin->id]['login_active']);
+        $this->assertFalse(collect($afterLogout->json('data'))->keyBy('id')[$secondSuperAdmin->id]['login_active']);
 
-        $this->databaseSession($admin);
+        $this->databaseSession($secondSuperAdmin);
         $afterLogin = $this->getJson(route('admin.api.users.index'))->assertOk();
-        $this->assertTrue(collect($afterLogin->json('data'))->keyBy('id')[$admin->id]['login_active']);
+        $this->assertTrue(collect($afterLogin->json('data'))->keyBy('id')[$secondSuperAdmin->id]['login_active']);
     }
 
     public function test_public_page_views_are_recorded_and_assets_admin_and_json_are_excluded(): void

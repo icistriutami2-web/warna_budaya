@@ -202,7 +202,12 @@ class MediaSourceManagementController extends Controller
 
         $source = DB::transaction(function () use ($data): Source {
             $source = Source::query()->create($this->sourceAttributes($data));
-            $this->syncSourceEntries($source->id, $data['cultural_entry_ids'] ?? []);
+            $entryIds = $data['cultural_entry_ids'] ?? [];
+            $this->syncSourceEntries($source->id, $entryIds);
+            $this->requestReviewForEntries(
+                $entryIds,
+                sprintf('Sumber referensi baru ditautkan: %s.', $source->title)
+            );
 
             return $source;
         });
@@ -228,10 +233,34 @@ class MediaSourceManagementController extends Controller
 
         $sourceModel = DB::transaction(function () use ($data, $sourceModel): Source {
             $sourceModel = Source::query()->lockForUpdate()->findOrFail($sourceModel->id);
-            $sourceModel->fill($this->sourceAttributes($data))->save();
+            $linkedEntryIds = DB::table('cultural_entry_source')
+                ->where('source_id', $sourceModel->id)
+                ->pluck('cultural_entry_id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+            sort($linkedEntryIds);
+            $sourceModel->fill($this->sourceAttributes($data));
+            $metadataChanged = $sourceModel->isDirty();
+            $sourceModel->save();
 
+            $affectedEntryIds = $linkedEntryIds;
+            $linksChanged = false;
             if (array_key_exists('cultural_entry_ids', $data)) {
-                $this->syncSourceEntries($sourceModel->id, $data['cultural_entry_ids']);
+                $nextEntryIds = array_values(array_unique(array_map('intval', $data['cultural_entry_ids'])));
+                sort($nextEntryIds);
+                $linksChanged = $linkedEntryIds !== $nextEntryIds;
+
+                if ($linksChanged) {
+                    $this->syncSourceEntries($sourceModel->id, $data['cultural_entry_ids']);
+                    $affectedEntryIds = array_merge($affectedEntryIds, $nextEntryIds);
+                }
+            }
+
+            if ($metadataChanged || $linksChanged) {
+                $this->requestReviewForEntries(
+                    $affectedEntryIds,
+                    sprintf('Metadata atau tautan sumber referensi berubah: %s.', $sourceModel->title)
+                );
             }
 
             return $sourceModel;
@@ -346,6 +375,56 @@ class MediaSourceManagementController extends Controller
                 ],
                 array_map('intval', $entryIds)
             ));
+        }
+    }
+
+    private function requestReviewForEntries(array $entryIds, string $reason): void
+    {
+        $entryIds = array_values(array_unique(array_map('intval', $entryIds)));
+
+        if ($entryIds === []) {
+            return;
+        }
+
+        $entries = CulturalEntry::withTrashed()
+            ->whereIn('id', $entryIds)
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($entries as $entry) {
+            if ($entry->trashed()) {
+                continue;
+            }
+
+            $previousVerificationStatus = $entry->verification_status;
+            $previousPublicationStatus = $entry->publication_status;
+            $needsReview = $previousVerificationStatus === 'verified'
+                || $previousPublicationStatus === 'published';
+
+            if ($needsReview) {
+                $entry->forceFill([
+                    'verification_status' => 'pending',
+                    'verified_at' => null,
+                    'publication_status' => 'draft',
+                    'published_at' => null,
+                    'updated_by' => auth()->id(),
+                ])->save();
+            }
+
+            $entry->verificationLogs()->create([
+                'reviewer_id' => auth()->id(),
+                'decision' => 'source_changed',
+                'notes' => sprintf(
+                    '%s Status verifikasi: %s → %s. Status publikasi: %s → %s.',
+                    $reason,
+                    $previousVerificationStatus,
+                    $needsReview ? 'pending' : $previousVerificationStatus,
+                    $previousPublicationStatus,
+                    $needsReview ? 'draft' : $previousPublicationStatus
+                ),
+                'reviewed_at' => now(),
+            ]);
         }
     }
 

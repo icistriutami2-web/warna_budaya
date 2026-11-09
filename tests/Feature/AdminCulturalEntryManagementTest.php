@@ -30,7 +30,7 @@ class AdminCulturalEntryManagementTest extends TestCase
     {
         $this->getJson(route('admin.cultural-entries.api.index'))->assertUnauthorized();
 
-        foreach ([User::ROLE_VERIFIKATOR, null] as $role) {
+        foreach (['verifikator', null] as $role) {
             $user = $this->createUser($role);
 
             $this->actingAs($user)
@@ -44,7 +44,7 @@ class AdminCulturalEntryManagementTest extends TestCase
                 ->assertForbidden();
         }
 
-        foreach ([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN] as $role) {
+        foreach ([User::ROLE_SUPER_ADMIN] as $role) {
             $user = $this->createUser($role);
             $this->actingAs($user)
                 ->getJson(route('admin.cultural-entries.api.index'))
@@ -58,7 +58,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_create_validates_slug_and_relations_and_keeps_workflow_statuses_managed_separately(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $regionId = $this->createRegion('Jawa Barat', 'jawa-barat');
         $categoryId = $this->createCategory('Musik', 'musik');
         $this->createEntry('Existing Entry', 'existing-entry');
@@ -109,7 +109,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_create_entry_with_media_is_atomic_and_sets_workflow_statuses_on_the_server(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
 
         $response = $this->actingAs($admin)
             ->postJson(route('admin.cultural-entries.api.store-with-media'), [
@@ -159,7 +159,7 @@ class AdminCulturalEntryManagementTest extends TestCase
             END
         ");
 
-        $this->actingAs($this->createUser(User::ROLE_ADMIN))
+        $this->actingAs($this->createUser(User::ROLE_SUPER_ADMIN))
             ->postJson(route('admin.cultural-entries.api.store-with-media'), [
                 'entry' => [
                     'title' => 'Entri yang Harus Rollback',
@@ -181,7 +181,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_create_entry_with_media_validates_both_payloads_and_prohibits_client_statuses(): void
     {
-        $this->actingAs($this->createUser(User::ROLE_ADMIN))
+        $this->actingAs($this->createUser(User::ROLE_SUPER_ADMIN))
             ->postJson(route('admin.cultural-entries.api.store-with-media'), [
                 'entry' => [
                     'title' => '',
@@ -224,10 +224,10 @@ class AdminCulturalEntryManagementTest extends TestCase
 
         $this->postJson($route, $payload)->assertUnauthorized();
 
-        $verifikator = $this->createUser(User::ROLE_VERIFIKATOR);
+        $verifikator = $this->createUser('verifikator');
         $this->actingAs($verifikator)->postJson($route, $payload)->assertForbidden();
 
-        foreach ([User::ROLE_ADMIN, User::ROLE_SUPER_ADMIN] as $role) {
+        foreach ([User::ROLE_SUPER_ADMIN] as $role) {
             $user = $this->createUser($role);
             $this->actingAs($user)
                 ->postJson($route, [
@@ -243,7 +243,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_update_syncs_categories_and_resets_published_verified_content_with_audit_log(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $regionId = $this->createRegion('Bali', 'bali');
         $firstCategoryId = $this->createCategory('Tari', 'tari');
         $secondCategoryId = $this->createCategory('Upacara', 'upacara');
@@ -281,7 +281,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_update_without_content_changes_does_not_reset_workflow_statuses(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $entryId = $this->createEntry('Published Entry', 'published-entry', null, 'published', 'verified');
         DB::table('cultural_entries')->where('id', $entryId)->update([
             'verified_at' => now(),
@@ -300,7 +300,7 @@ class AdminCulturalEntryManagementTest extends TestCase
 
     public function test_index_search_filter_pagination_and_soft_delete_preserve_entry_relations(): void
     {
-        $admin = $this->createUser(User::ROLE_ADMIN);
+        $admin = $this->createUser(User::ROLE_SUPER_ADMIN);
         $regionId = $this->createRegion('Sumatera Barat', 'sumatera-barat');
         $categoryId = $this->createCategory('Kuliner', 'kuliner');
         foreach (range(1, 3) as $number) {

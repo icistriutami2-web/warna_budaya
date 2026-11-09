@@ -14,6 +14,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#19382d">
     <title>@yield('title', 'Kurasi Admin | WARNA BUDAYA')</title>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -39,10 +40,10 @@
         <div class="admin-dashboard-shell">
             <aside class="admin-sidebar" aria-label="Navigasi admin">
                 <a class="admin-brand" href="{{ route('admin.home') }}">
-                    <span class="admin-brand-mark" aria-hidden="true">W</span>
+                    <img class="admin-brand-mark" src="{{ asset('images/brand-emblem.svg') }}" alt="">
                     <span class="admin-brand-copy">
                         <strong>WARNA BUDAYA</strong>
-                        <small>Ruang pengelola</small>
+                        <small>Jaga Budaya, Lestarikan Negeri</small>
                     </span>
                 </a>
 
@@ -138,10 +139,10 @@
         <header class="admin-header">
             <div class="admin-header-inner">
                 <a class="admin-brand" href="{{ route('admin.home') }}">
-                    <span class="admin-brand-mark" aria-hidden="true">W</span>
+                    <img class="admin-brand-mark" src="{{ asset('images/brand-emblem.svg') }}" alt="">
                     <span class="admin-brand-copy">
                         <strong>WARNA BUDAYA</strong>
-                        <small>Ruang kurasi</small>
+                        <small>Jaga Budaya, Lestarikan Negeri</small>
                     </span>
                 </a>
                 <nav class="admin-nav" aria-label="Navigasi administrasi">

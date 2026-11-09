@@ -28,7 +28,7 @@
             <h1>Wilayah <em>Nusantara.</em></h1>
             <p>Rawat referensi wilayah asal agar setiap kisah budaya berakar pada tempat yang tepat.</p>
         </div>
-        <div class="admin-heading-stamp" aria-hidden="true">WB<small>PROVINSI<br>NUSANTARA</small></div>
+        <img class="admin-heading-stamp" src="{{ asset('images/brand-emblem.svg') }}" alt="">
     </section>
 
     @unless ($regionApiReady && $regionPageReady)
